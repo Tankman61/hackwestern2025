@@ -4,6 +4,18 @@ import { useState, useEffect } from "react";
 import { Card, Flex, Heading, Text, Button, Badge, Box, TextField, ScrollArea, TextArea, DropdownMenu } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ChevronDownIcon } from "@radix-ui/react-icons";
+import SideMenu from "./components/SideMenu";
+import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
+import StocksPortfolio from "./components/portfolios/StocksPortfolio";
+import OptionsPortfolio from "./components/portfolios/OptionsPortfolio";
+import ETFsPortfolio from "./components/portfolios/ETFsPortfolio";
+import CryptoHoldings from "./components/holdings/CryptoHoldings";
+import StocksHoldings from "./components/holdings/StocksHoldings";
+import OptionsHoldings from "./components/holdings/OptionsHoldings";
+import ETFsHoldings from "./components/holdings/ETFsHoldings";
+
+type PortfolioView = "crypto" | "stocks" | "options" | "etfs" | null;
+type HoldingsView = "crypto-holdings" | "stocks-holdings" | "options-holdings" | "etfs-holdings" | null;
 
 const subredditOptions = [
   "All",
@@ -127,6 +139,7 @@ const subredditData: Record<SubredditOption, SubredditEntry> = {
 };
 
 export default function Home() {
+  const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [agentExpanded, setAgentExpanded] = useState(false);
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true); // Always open by default
@@ -262,14 +275,32 @@ export default function Home() {
         </Flex>
       </div>
 
+      {/* Side Menu */}
+      <SideMenu 
+        isOpen={sideMenuOpen} 
+        onToggle={() => setSideMenuOpen(!sideMenuOpen)}
+        onPortfolioSelect={(portfolio) => {
+          setActivePortfolio(portfolio);
+          setActiveHoldings(null);
+          setSideMenuOpen(false);
+        }}
+        onHoldingsSelect={(holdings) => {
+          setActiveHoldings(holdings);
+          setActivePortfolio(null);
+          setSideMenuOpen(false);
+        }}
+      />
+
       <div className="grid h-[calc(100vh-3rem)] gap-0" style={{
         gridTemplateColumns: tradingPanelOpen ? '1fr 280px 40px' : '1fr 40px',
         gridTemplateRows: '1fr'
       }}>
-        {/* LEFT COLUMN: Chart + Data Feeds */}
+        {/* LEFT COLUMN: Chart/Portfolio/Holdings + Data Feeds */}
         <div className="flex flex-col">
-          {/* Main Chart Area */}
-          <div className="flex-1 border-r" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+          {activePortfolio === null && activeHoldings === null ? (
+            <>
+              {/* Main Chart Area */}
+              <div className="flex-1 border-r" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
             <div className="flex h-full items-center justify-center flex-col gap-4 p-8">
               <Text size="6" weight="bold" style={{ color: 'var(--slate-11)' }}>
                 BTC/USD LIVE CHART
@@ -483,6 +514,22 @@ export default function Home() {
               )}
             </div>
           </div>
+            </>
+          ) : activePortfolio !== null ? (
+            <>
+              {activePortfolio === "crypto" && <CryptoPortfolio />}
+              {activePortfolio === "stocks" && <StocksPortfolio />}
+              {activePortfolio === "options" && <OptionsPortfolio />}
+              {activePortfolio === "etfs" && <ETFsPortfolio />}
+            </>
+          ) : (
+            <>
+              {activeHoldings === "crypto-holdings" && <CryptoHoldings />}
+              {activeHoldings === "stocks-holdings" && <StocksHoldings />}
+              {activeHoldings === "options-holdings" && <OptionsHoldings />}
+              {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
+            </>
+          )}
         </div>
 
         {/* TRADING PANEL - Always shows icons on right, expands left */}
