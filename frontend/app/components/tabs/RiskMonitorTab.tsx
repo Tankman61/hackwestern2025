@@ -44,6 +44,14 @@ export default function RiskMonitorTab() {
                          data.risk_level.level === "Medium" ? 'var(--yellow-4)' :
                          'var(--green-4)';
 
+    const hypeColor = data.hype_level.level === "High" ? 'var(--purple-10)' :
+                       data.hype_level.level === "Medium" ? 'var(--blue-10)' :
+                       'var(--slate-11)';
+
+    const hypeBgColor = data.hype_level.level === "High" ? 'var(--purple-4)' :
+                         data.hype_level.level === "Medium" ? 'var(--blue-4)' :
+                         'var(--slate-4)';
+
     return (
       <>
         <div className="px-3 py-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
@@ -69,6 +77,32 @@ export default function RiskMonitorTab() {
           </div>
           <Text size="1" className="leading-relaxed" style={{ color: 'var(--slate-11)' }}>
             {data.risk_level.summary || "No summary available"}
+          </Text>
+        </div>
+
+        <div className="px-3 py-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+          <Text size="1" className="mb-3 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+            Hype Level
+          </Text>
+          <Flex align="baseline" gap="2" className="mb-2">
+            <Text size="8" weight="bold" className="font-mono leading-none" style={{ color: hypeColor }}>
+              {data.hype_level.score}
+            </Text>
+            <Text size="2" style={{ color: 'var(--slate-11)' }}>/ 100</Text>
+          </Flex>
+          <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: 'var(--slate-6)' }}>
+            <div
+              className="h-full transition-all"
+              style={{ width: `${data.hype_level.score}%`, background: hypeColor }}
+            ></div>
+          </div>
+          <div className="mb-2">
+            <Badge size="1" style={{ background: hypeBgColor, color: hypeColor }}>
+              {data.hype_level.level}
+            </Badge>
+          </div>
+          <Text size="1" className="leading-relaxed" style={{ color: 'var(--slate-11)' }}>
+            Social sentiment and market enthusiasm
           </Text>
         </div>
 

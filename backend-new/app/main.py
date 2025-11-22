@@ -23,6 +23,9 @@ from app.api.trading import router as trading_router
 from app.api.portfolio import router as portfolio_router
 from app.api.orders import router as orders_router
 from app.api.market_data import router as market_data_router
+from app.api.debug import router as debug_router
+from app.api.agent import router as agent_router
+from app.api.voice_websocket import router as voice_router
 
 # Configure logging
 logging.basicConfig(
@@ -30,6 +33,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Silence noisy loggers
+logging.getLogger("app.services.finnhub").setLevel(logging.ERROR)
+logging.getLogger("app.api.market_websocket").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -45,7 +53,11 @@ async def lifespan(app: FastAPI):
     # Note: Alpaca is only used for trading execution, not market data
     finnhub_service.set_fastapi_loop(loop)
     finnhub_service.add_price_update_callback(broadcast_price_update)
+
+    # Auto-subscribe to BTC on startup (for agent to work without frontend)
+    await finnhub_service.subscribe_crypto(["BTC", "ETH"])
     logger.info("Finnhub market data service initialized (all market data display)")
+    logger.info("Auto-subscribed to BTC and ETH for agent access")
     
     yield
     
@@ -118,6 +130,9 @@ app.include_router(trading_router, prefix="/api", tags=["trading"])
 app.include_router(portfolio_router, prefix="/api", tags=["portfolio"])
 app.include_router(orders_router, prefix="/api", tags=["orders"])
 app.include_router(market_data_router, prefix="/api", tags=["market"])
+app.include_router(agent_router, tags=["agent"])  # LangGraph agent chat
+app.include_router(voice_router, tags=["voice"])  # Voice WebSocket for STT/TTS
+app.include_router(debug_router, tags=["debug"])  # Debug endpoints for testing crashes
 
 @app.get("/")
 async def root():

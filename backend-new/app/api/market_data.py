@@ -24,7 +24,7 @@ async def get_risk_monitor():
     """
     db = get_supabase()
 
-    # Get latest market_context using the wrapper's client
+    # Get latest market_context
     context_result = db.client.table("market_context")\
         .select("*")\
         .order("created_at", desc=True)\
@@ -38,6 +38,10 @@ async def get_risk_monitor():
                 "score": 0,
                 "level": "Low",
                 "summary": "No market data available"
+            },
+            "hype_level": {
+                "score": 0,
+                "level": "Low"
             },
             "market_overview": {
                 "btc_price": 0,
@@ -60,6 +64,15 @@ async def get_risk_monitor():
     else:
         risk_level = "High"
 
+    # Determine hype level from score
+    hype_score = int(context.get("hype_score", 0))
+    if hype_score < 40:
+        hype_level = "Low"
+    elif hype_score < 70:
+        hype_level = "Medium"
+    else:
+        hype_level = "High"
+
     # Get watchlist
     watchlist_result = db.client.table("watchlist")\
         .select("ticker, price_change_24h")\
@@ -80,6 +93,10 @@ async def get_risk_monitor():
             "score": risk_score,
             "level": risk_level,
             "summary": context.get("summary", "")
+        },
+        "hype_level": {
+            "score": hype_score,
+            "level": hype_level
         },
         "market_overview": {
             "btc_price": float(context.get("btc_price", 0)),

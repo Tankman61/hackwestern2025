@@ -30,7 +30,7 @@ def _format_symbol(symbol: str) -> str:
 
 def _get_lock_state() -> Dict[str, Optional[str]]:
     db = get_supabase()
-    result = db.table("portfolio").select("is_locked, lock_reason, lock_expires_at").limit(1).execute()
+    result = db.client.table("portfolio").select("is_locked, lock_reason, lock_expires_at").limit(1).execute()
     if result.data:
         return result.data[0]
     return {"is_locked": False, "lock_reason": None, "lock_expires_at": None}

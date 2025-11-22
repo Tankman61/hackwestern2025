@@ -60,7 +60,7 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
     return "end"
 
 
-def call_tools(state: AgentState) -> AgentState:
+async def call_tools(state: AgentState) -> AgentState:
     """
     Tool execution node: runs the tools requested by the agent
     """
@@ -74,8 +74,8 @@ def call_tools(state: AgentState) -> AgentState:
         tool = next((t for t in ALL_TOOLS if t.name == tool_call["name"]), None)
 
         if tool:
-            # Execute tool with provided arguments
-            result = tool.invoke(tool_call["args"])
+            # Execute tool with provided arguments (async)
+            result = await tool.ainvoke(tool_call["args"])
 
             # Create tool message with result
             from langchain_core.messages import ToolMessage

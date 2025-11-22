@@ -17,6 +17,10 @@ export interface RiskMonitorData {
     level: 'Low' | 'Medium' | 'High';
     summary: string;
   };
+  hype_level: {
+    score: number;
+    level: 'Low' | 'Medium' | 'High';
+  };
   market_overview: {
     btc_price: number;
     price_change_24h: number;

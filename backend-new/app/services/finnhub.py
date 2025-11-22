@@ -86,9 +86,11 @@ class FinnhubMarketDataService:
             price = float(trade.get("p", 0))
             volume = float(trade.get("v", 0))
             timestamp_ms = int(trade.get("t", 0))
-            
+
             if not symbol_full or price <= 0:
                 return
+
+            # NO LOGGING - trade data comes in constantly and spams logs
             
             # Determine if this is crypto or stock
             is_crypto = ":" in symbol_full or "BINANCE" in symbol_full.upper()
@@ -226,17 +228,23 @@ class FinnhubMarketDataService:
             logger.error("   Market data will not be available. Please set FINNHUB_API_KEY in your .env file")
             logger.error("   Get a free API key at: https://finnhub.io/register")
             return
-        
+
         ws_url = f"wss://ws.finnhub.io?token={self.api_key}"
-        
+
+        # Disable SSL verification for development (fixes macOS Python 3.13 SSL issues)
+        import ssl
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
         retry_count = 0
         max_retry_delay = 300  # Max 5 minutes
         base_delay = 5
-        
+
         while self._running:
             try:
                 logger.info(f"Connecting to Finnhub WebSocket: {ws_url}")
-                async with websockets.connect(ws_url) as websocket:
+                async with websockets.connect(ws_url, ssl=ssl_context) as websocket:
                     self.ws = websocket
                     logger.info("Connected to Finnhub WebSocket")
                     retry_count = 0  # Reset retry count on successful connection
@@ -462,4 +470,62 @@ class FinnhubMarketDataService:
 
 # Global service instance
 finnhub_service = FinnhubMarketDataService()
+
+
+async def get_btc_data() -> Dict[str, any]:
+    """
+    Get current BTC price data from Finnhub WebSocket via FastAPI (SOURCE OF TRUTH).
+    Used by Data Ingest Worker to populate database.
+
+    Returns:
+        {
+            "btc_price": float,
+            "price_change_24h": float (percentage),
+            "volume_24h": str (formatted),
+            "price_high_24h": float,
+            "price_low_24h": float
+        }
+    """
+    import httpx
+    import os
+
+    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    # Call FastAPI server to get price (same pattern as agent tool)
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{API_BASE_URL}/api/prices/BTC",
+                timeout=5.0
+            )
+
+            if response.status_code == 404:
+                logger.error("❌ BTC price not available from Finnhub. Is FastAPI server running with Finnhub WebSocket connected?")
+                raise ValueError("BTC price not available from Finnhub. FastAPI server might not be running or Finnhub WebSocket is not connected.")
+
+            response.raise_for_status()
+            data = response.json()
+
+            btc_price = data.get("price")
+            if btc_price is None:
+                raise ValueError("No price data in response from FastAPI")
+
+            logger.info(f"✅ Got BTC price from FastAPI: ${btc_price:,.2f}")
+
+            # For MVP: Return live price with estimated 24h values
+            # TODO: Track historical data to calculate real 24h change, high, low, volume
+            return {
+                "btc_price": round(btc_price, 2),
+                "price_change_24h": 0.0,  # TODO: Calculate from historical data
+                "volume_24h": "$0",  # TODO: Aggregate from trade volumes
+                "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
+                "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
+            }
+
+    except httpx.HTTPError as e:
+        logger.error(f"❌ Failed to fetch BTC price from FastAPI: {e}")
+        raise ValueError(f"Failed to fetch BTC price from FastAPI server: {e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error fetching BTC price: {e}")
+        raise ValueError(f"Unexpected error: {e}")
 

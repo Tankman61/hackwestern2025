@@ -46,7 +46,7 @@ class TriggerMonitorWorker:
     async def start(self):
         """Start the worker loop"""
         self.is_running = True
-        logger.info("🚀 Trigger Monitor Worker started (interval: 1s)")
+        logger.info("🚀Trigger Monitor Worker started (interval: 1s)")
         
         while self.is_running:
             try:
