@@ -1,158 +1,96 @@
 """
-Order/Trading endpoints
-POST /api/orders - Create manual order
-GET /api/orders - Get active orders
-DELETE /api/orders/{order_id} - Cancel order
+Order endpoints powered by Alpaca
+Maps legacy /api/orders routes to Alpaca paper trading
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from app.services.supabase import get_supabase
-from datetime import datetime
+from typing import Optional, List
+
+from app.services.alpaca_trading import trading_service
 
 router = APIRouter()
 
 
 class CreateOrderRequest(BaseModel):
-    ticker: str  # e.g., "BTC-USD"
-    side: str  # "BUY" or "SELL"
-    order_type: str  # "MARKET", "LIMIT", "STOP_LOSS"
+    ticker: str
+    side: str  # BUY/SELL
+    order_type: str  # MARKET/LIMIT/STOP_LOSS
     amount: float
-    limit_price: float = None  # Required for LIMIT and STOP_LOSS orders
+    limit_price: Optional[float] = None
+
+
+def _format_symbol(symbol: str) -> str:
+    # Alpaca may return BTCUSD; convert to BTC/USD for UI
+    if "/" in symbol:
+        return symbol
+    if symbol.endswith("USD") and len(symbol) > 3:
+        return f"{symbol[:-3]}/USD"
+    return symbol
+
+
+def _normalize_symbol(ticker: str) -> str:
+    return ticker.replace("-", "/")
 
 
 @router.get("/orders")
-async def get_orders():
-    """Get all active orders (pending execution)"""
-    db = get_supabase()
+async def get_orders(status: str = Query(default="open", regex="^(open|closed|all)$")):
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Orders are trades with status='OPEN' and no entry_price
-    result = db.table("trades")\
-        .select("*")\
-        .eq("status", "OPEN")\
-        .is_("entry_price", "null")\
-        .order("created_at", desc=True)\
-        .execute()
+    orders = await trading_service.get_orders(status=status)
+    formatted: List[dict] = []
 
-    orders = []
-    for trade in result.data:
-        order_type_display = f"{trade['order_type']} {trade['side']}"
-
-        orders.append({
-            "id": trade["id"],
-            "ticker": trade["ticker"].replace("-", "/"),
-            "order_type": order_type_display,
-            "amount": float(trade["amount"]),
-            "limit_price": float(trade["limit_price"]) if trade["limit_price"] else None,
-            "created_at": trade["created_at"],
-            "placed_ago": ""  # TODO: Calculate on frontend or here
+    for order in orders:
+        qty = order.get("qty") or order.get("notional") or 0
+        formatted.append({
+            "id": order["id"],
+            "ticker": _format_symbol(order["symbol"]),
+            "order_type": f"{order['order_type'].upper()} {order['side'].upper()}",
+            "amount": float(qty),
+            "limit_price": order.get("limit_price"),
+            "created_at": order.get("created_at"),
+            "status": order.get("status"),
+            "placed_ago": ""
         })
 
-    return orders
+    return formatted
 
 
 @router.post("/orders")
 async def create_order(order: CreateOrderRequest):
-    """Create a new manual order"""
-    db = get_supabase()
- 
-    # Validate order_type
-    valid_order_types = ["MARKET", "LIMIT", "STOP_LOSS"]
-    if order.order_type not in valid_order_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_type. Must be one of: {', '.join(valid_order_types)}"
-        )
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Validate side
-    valid_sides = ["BUY", "SELL"]
-    if order.side not in valid_sides:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid side. Must be one of: {', '.join(valid_sides)}"
-        )
+    symbol = _normalize_symbol(order.ticker)
+    side = order.side.lower()
 
-    # Validate limit_price for LIMIT and STOP_LOSS orders
-    if order.order_type in ["LIMIT", "STOP_LOSS"] and order.limit_price is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{order.order_type} orders require a limit_price"
-        )
+    if order.order_type.upper() == "MARKET":
+        result = await trading_service.place_market_order(symbol, order.amount, side)
+    elif order.order_type.upper() == "LIMIT":
+        if order.limit_price is None:
+            raise HTTPException(status_code=400, detail="LIMIT orders require limit_price")
+        result = await trading_service.place_limit_order(symbol, order.amount, side, order.limit_price)
+    elif order.order_type.upper() == "STOP_LOSS":
+        if order.limit_price is None:
+            raise HTTPException(status_code=400, detail="STOP_LOSS orders require limit_price (stop price)")
+        result = await trading_service.place_stop_order(symbol, order.amount, side, order.limit_price)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported order_type")
 
-    # Check if portfolio is locked
-    portfolio_result = db.table("portfolio").select("is_locked").limit(1).execute()
-    if portfolio_result.data and portfolio_result.data[0]["is_locked"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Trading is locked. Portfolio is currently locked by the agent."
-        )
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to place order")
 
-    # Create order
-    order_data = {
-        "ticker": order.ticker,
-        "side": order.side,
-        "order_type": order.order_type,
-        "amount": order.amount,
-        "status": "OPEN",
-        "created_at": datetime.utcnow().isoformat()
-    }
-
-    # Add limit_price if provided
-    if order.limit_price is not None:
-        order_data["limit_price"] = order.limit_price
-
-    result = db.table("trades").insert(order_data).execute()
-
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to create order")
-
-    created_order = result.data[0]
-
-    return {
-        "id": created_order["id"],
-        "ticker": created_order["ticker"].replace("-", "/"),
-        "side": created_order["side"],
-        "order_type": created_order["order_type"],
-        "amount": float(created_order["amount"]),
-        "limit_price": float(created_order["limit_price"]) if created_order.get("limit_price") else None,
-        "status": created_order["status"],
-        "created_at": created_order["created_at"],
-        "message": "Order created successfully"
-    }
+    result["ticker"] = _format_symbol(result["symbol"])
+    return result
 
 
 @router.delete("/orders/{order_id}")
 async def cancel_order(order_id: str):
-    """Cancel an active order"""
-    db = get_supabase()
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Verify order exists and is still OPEN
-    check_result = db.table("trades")\
-        .select("*")\
-        .eq("id", order_id)\
-        .eq("status", "OPEN")\
-        .is_("entry_price", "null")\
-        .execute()
-
-    if not check_result.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Order not found or already cancelled/filled"
-        )
-
-    # Update status to CANCELLED
-    result = db.table("trades")\
-        .update({"status": "CANCELLED"})\
-        .eq("id", order_id)\
-        .execute()
-
-    if not result.data:
+    success = await trading_service.cancel_order(order_id)
+    if not success:
         raise HTTPException(status_code=500, detail="Failed to cancel order")
 
-    cancelled_order = result.data[0]
-
-    return {
-        "id": cancelled_order["id"],
-        "ticker": cancelled_order["ticker"].replace("-", "/"),
-        "status": cancelled_order["status"],
-        "message": "Order cancelled successfully"
-    }
+    return {"success": True, "message": f"Order {order_id} cancelled"}

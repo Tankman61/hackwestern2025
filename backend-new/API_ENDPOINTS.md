@@ -55,33 +55,38 @@ SELECT ticker, price_change_24h FROM watchlist ORDER BY ticker;
 ## 2. GET /api/portfolio
 **UI Panel:** Portfolio tab
 
+**Now reads from:** Alpaca account + Supabase lock state
+
 **Returns:**
 ```json
 {
-  "balance_usd": 50000.00,
-  "total_value": 142847.23, // Calculated: balance + open positions value
-  "pnl_total": 8492.15,
-  "pnl_percent": 6.32,
-  "is_locked": false
+  "balance_usd": 49200.10,
+  "total_value": 50542.33,
+  "pnl_total": 210.45,
+  "pnl_percent": 0.42,
+  "is_locked": false,
+  "lock_reason": null,
+  "lock_expires_at": null
 }
 ```
 
-**Query:**
-```sql
-SELECT * FROM portfolio LIMIT 1;
--- Calculate total_value by summing open positions at current prices
-```
+- `balance_usd` comes from Alpaca `cash`
+- `total_value` = Alpaca `portfolio_value`
+- `pnl_total/pnl_percent` derived from Alpaca `equity` vs `last_equity`
+- `is_locked` still comes from Supabase `portfolio` table (agent lock switch)
 
 ---
 
 ## 3. GET /api/positions
 **UI Panel:** Portfolio → Open Positions
 
+**Data source:** `trading_service.get_positions()` (Alpaca)
+
 **Returns:**
 ```json
 [
   {
-    "id": "uuid",
+    "id": "BTCUSD",
     "ticker": "BTC/USD",
     "side": "LONG",
     "amount": 0.5,
@@ -89,180 +94,78 @@ SELECT * FROM portfolio LIMIT 1;
     "current_price": 98742.31,
     "pnl": 1246.15,
     "pnl_percent": 2.59
-  },
-  {
-    "id": "uuid",
-    "ticker": "ETH/USD",
-    "side": "SHORT",
-    "amount": 2.0,
-    "entry_price": 3842.00,
-    "current_price": 3934.25,
-    "pnl": -184.50,
-    "pnl_percent": -2.40
   }
 ]
 ```
 
-**Query:**
-```sql
-SELECT * FROM trades
-WHERE status = 'OPEN' AND entry_price IS NOT NULL
-ORDER BY created_at DESC;
-```
-
-**Notes:**
-- Frontend calculates `current_price` by fetching latest BTC/ETH prices
-- `pnl` = (current_price - entry_price) * amount * (1 if LONG else -1)
+- P&L recalculated with live prices from Alpaca’s streaming cache
+- `id` = Alpaca symbol (e.g., `BTCUSD`) to keep frontend stable
 
 ---
 
 ## 4. GET /api/orders
 **UI Panel:** Portfolio → Open Orders
 
-**Returns:**
+**Data source:** `trading_service.get_orders(status="open")`
+
+**Returns Alpaca orders** with simplified fields:
 ```json
 [
   {
-    "id": "uuid",
+    "id": "d7d...f8",
     "ticker": "BTC/USD",
     "order_type": "LIMIT BUY",
     "amount": 0.3,
     "limit_price": 97500.00,
     "created_at": "2024-01-15T09:00:00Z",
-    "placed_ago": "30 min ago"
+    "status": "open",
+    "placed_ago": ""
   }
 ]
 ```
 
-**Query:**
-```sql
-SELECT * FROM trades
-WHERE status = 'OPEN' AND entry_price IS NULL
-ORDER BY created_at DESC;
-```
-
-**Notes:** Orders have `limit_price` but no `entry_price` yet
-
 ---
 
 ## 5. DELETE /api/orders/:id
-**UI Action:** Cancel Order button
-
-**Body:** None
-
-**Action:** `UPDATE trades SET status = 'CANCELLED' WHERE id = :id`
+Cancels the Alpaca order via `trading_service.cancel_order(order_id)`.
 
 ---
 
-## 5b. PATCH /api/positions/:id
-**UI Action:** Adjust position size button
+## 5b. PATCH /api/positions/:symbol
+**Purpose:** Adjust position size by submitting offsetting market orders.
 
 **Body:**
 ```json
-{
-  "amount": 0.3
-}
+{ "amount": 0.3 }
 ```
 
-**Action:**
-```sql
-UPDATE trades
-SET amount = :amount
-WHERE id = :id AND status = 'OPEN' AND entry_price IS NOT NULL;
-```
-
-**Returns:** Updated position object
-
-**Notes:** Can only adjust open positions, not pending orders
+- Fetches current Alpaca position
+- Calculates delta vs requested size
+- Places buy/sell market order for the difference
 
 ---
 
-## 5c. POST /api/positions/:id/close
-**UI Action:** Close position button
-
-**Body:**
-```json
-{
-  "current_price": 98742.31
-}
-```
-
-**Action:**
-```sql
--- 1. Calculate P&L
---    For LONG: pnl = (current_price - entry_price) * amount
---    For SHORT: pnl = (entry_price - current_price) * amount
-
--- 2. Update trade
-UPDATE trades
-SET status = 'FILLED',
-    exit_price = :current_price,
-    pnl = :calculated_pnl,
-    filled_at = NOW()
-WHERE id = :id AND status = 'OPEN';
-
--- 3. Update portfolio balance
-UPDATE portfolio
-SET balance_usd = balance_usd + :calculated_pnl;
-```
-
-**Returns:** Closed position object with final P&L
-
-**Notes:** Automatically updates portfolio balance with profit/loss
+## 5c. POST /api/positions/:symbol/close
+Calls `trading_service.close_position(symbol, qty)` which routes to Alpaca `close_position`. `qty` is optional (default close entire position).
 
 ---
 
 ## 6. GET /api/history
 **UI Panel:** Trade History tab
 
-**Returns:**
-```json
-[
-  {
-    "id": "uuid",
-    "ticker": "BTC/USD",
-    "side": "LONG",
-    "amount": 0.6,
-    "entry_price": 94200.00,
-    "exit_price": 98900.00,
-    "pnl": 2847.00,
-    "filled_at": "2024-01-15T08:00:00Z",
-    "time_ago": "2 hours ago"
-  }
-]
-```
-
-**Query:**
-```sql
-SELECT * FROM trades
-WHERE status = 'FILLED'
-ORDER BY filled_at DESC
-LIMIT 50;
-```
+- Fetches Alpaca orders with `status="closed"`
+- Filters to filled orders and returns simplified entries (pnl currently 0 until we add deeper analytics)
 
 ---
 
 ## 7. POST /api/orders
-**UI Action:** Manual trade execution (Trading tab)
+**UI Action:** Trading tab manual order
 
-**Body:**
-```json
-{
-  "ticker": "BTC-USD",
-  "side": "BUY",
-  "order_type": "LIMIT",
-  "amount": 0.5,
-  "limit_price": 97500.00
-}
-```
-
-**Action:**
-```sql
-INSERT INTO trades (ticker, side, order_type, amount, limit_price, status)
-VALUES (:ticker, :side, :order_type, :amount, :limit_price, 'OPEN');
-```
-
-**Returns:** Created trade object
+- Routes to Alpaca:
+  - `order_type="MARKET"` → `place_market_order`
+  - `"LIMIT"` → `place_limit_order`
+  - `"STOP_LOSS"` → `place_stop_order` using `limit_price` as stop trigger
+- Returns Alpaca’s order payload directly (plus normalized ticker)
 
 ---
 

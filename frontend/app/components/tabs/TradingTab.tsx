@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { Flex, Text, Button } from "@radix-ui/themes";
-import { useAccount, useTrading } from "@/hooks/useTrading";
-import { useAlpacaWebSocket } from "@/hooks/useAlpacaWebSocket";
-import type { AlpacaMessage } from "@/lib/websocket";
+import { api } from "@/app/lib/api";
+import { toast } from "react-hot-toast";
 
 interface TradingTabProps {
   tradeType: "long" | "short";
@@ -29,102 +28,30 @@ export default function TradingTab({
   takeProfit,
   setTakeProfit
 }: TradingTabProps) {
-  const [symbol, setSymbol] = useState("BTC/USD");
-  const [assetType, setAssetType] = useState<"crypto" | "stocks">("crypto");
-  const [orderType, setOrderType] = useState<"market" | "limit">("market");
-  const [limitPrice, setLimitPrice] = useState("");
-  const [livePrice, setLivePrice] = useState<number | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
-  
-  const { account, loading: accountLoading } = useAccount();
-  const { placeMarketOrder, placeLimitOrder } = useTrading();
+  const [submitting, setSubmitting] = useState(false);
 
-  // Get live price from WebSocket
-  const handlePriceMessage = (message: AlpacaMessage) => {
-    if (message.type === "bar" && message.data.symbol === symbol.replace("/", "")) {
-      setLivePrice(message.data.close);
-    } else if (message.type === "trade" && message.data.symbol === symbol.replace("/", "")) {
-      setLivePrice(message.data.price);
+  const handleSubmit = async () => {
+    const size = parseFloat(positionSize);
+    if (Number.isNaN(size) || size <= 0) {
+      toast.error("Enter a valid position size");
+      return;
     }
-  };
-
-  useAlpacaWebSocket({
-    symbols: [symbol.replace("/", "")],
-    dataType: assetType,
-    onMessage: handlePriceMessage,
-    autoConnect: true,
-  });
-
-  // Calculate estimated costs and AI suggestions
-  const estimatedCost = livePrice ? (parseFloat(positionSize) || 0) * livePrice : 0;
-  const buyingPower = account?.buying_power || 0;
-  const canAfford = estimatedCost <= buyingPower && estimatedCost > 0;
-
-  // AI-suggested stop loss (2% from entry)
-  const aiStopLoss = livePrice 
-    ? tradeType === "long" 
-      ? livePrice * 0.98 
-      : livePrice * 1.02
-    : 0;
-
-  // AI-suggested take profit (5% from entry)
-  const aiTakeProfit = livePrice 
-    ? tradeType === "long" 
-      ? livePrice * 1.05 
-      : livePrice * 0.95
-    : 0;
-
-  // AI-suggested position size (10% of buying power)
-  const aiPositionSize = livePrice && buyingPower > 0
-    ? (buyingPower * 0.1) / livePrice
-    : 0;
-
-  const handleExecuteTrade = async () => {
-    if (!livePrice || !canAfford) return;
-
-    setIsExecuting(true);
-    setLastOrderStatus(null);
+    if (submitting) return;
 
     try {
-      const qty = parseFloat(positionSize);
-      const side = tradeType === "long" ? "buy" : "sell";
-
-      let order;
-      if (orderType === "market") {
-        order = await placeMarketOrder(
-          symbol,
-          qty,
-          side as "buy" | "sell",
-          "gtc"
-        );
-      } else {
-        order = await placeLimitOrder(
-          symbol,
-          qty,
-          side as "buy" | "sell",
-          parseFloat(limitPrice),
-          "gtc"
-        );
-      }
-
-      if (order) {
-        setLastOrderStatus(`✅ Order placed: ${order.status}`);
-        setPositionSize("");
-        setLimitPrice("");
-      } else {
-        setLastOrderStatus("❌ Order failed");
-      }
-    } catch (error: any) {
-      setLastOrderStatus(`❌ Error: ${error.message}`);
+      setSubmitting(true);
+      await api.createOrder({
+        ticker: "BTC-USD",
+        side: tradeType === "long" ? "BUY" : "SELL",
+        order_type: "MARKET",
+        amount: size,
+      });
+    } catch (error) {
+      // toast handled in api layer
     } finally {
-      setIsExecuting(false);
+      setSubmitting(false);
     }
   };
-
-  // Symbol lists
-  const cryptoSymbols = ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"];
-  const stockSymbols = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NVDA", "META"];
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -447,23 +374,13 @@ export default function TradingTab({
           size="3"
           className="w-full font-bold flex items-center justify-center"
           style={{
-            background: !canAfford || isExecuting 
-              ? 'var(--slate-7)' 
-              : tradeType === "long" 
-                ? 'var(--green-9)' 
-                : 'var(--red-9)',
-            color: 'white',
-            cursor: !canAfford || isExecuting ? 'not-allowed' : 'pointer'
+            background: tradeType === "long" ? 'var(--green-9)' : 'var(--red-9)',
+            color: 'white'
           }}
-          onClick={handleExecuteTrade}
-          disabled={!canAfford || isExecuting || !livePrice}
+          disabled={submitting}
+          onClick={handleSubmit}
         >
-          {isExecuting 
-            ? "Executing..." 
-            : orderType === "market"
-              ? `${tradeType === "long" ? "Buy" : "Sell"} ${symbol} (Market)`
-              : `${tradeType === "long" ? "Buy" : "Sell"} ${symbol} (Limit)`
-          }
+          {submitting ? "Submitting..." : tradeType === "long" ? "Open Long Position" : "Open Short Position"}
         </Button>
         <Flex justify="center" align="center" gap="1" className="mt-3">
           <div className="w-1 h-1 rounded-full" style={{ 

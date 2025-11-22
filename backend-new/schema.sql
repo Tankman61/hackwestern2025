@@ -12,29 +12,7 @@ CREATE TABLE portfolio (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. TRADES TABLE (Order Book + History)
--- No user_id needed, we assume single user
-CREATE TABLE trades (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    ticker TEXT NOT NULL, -- 'BTC-USD', 'ETH-USD', 'SOL-USD'
-    side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
-    order_type TEXT NOT NULL CHECK (order_type IN ('MARKET', 'LIMIT', 'STOP_LOSS')),
-    amount NUMERIC(18, 8) NOT NULL,
-
-    -- For pending orders
-    limit_price NUMERIC(15, 2), -- Target price for LIMIT/STOP_LOSS orders
-
-    -- For open/filled positions
-    entry_price NUMERIC(15, 2), -- Actual price when trade opened
-    exit_price NUMERIC(15, 2), -- Actual price when trade closed
-    pnl NUMERIC(15, 2) DEFAULT 0.00, -- Profit/Loss in USD
-
-    status TEXT DEFAULT 'OPEN' CHECK (status IN ('PENDING_APPROVAL', 'OPEN', 'FILLED', 'CANCELLED', 'REJECTED')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    filled_at TIMESTAMP WITH TIME ZONE -- When trade was executed/closed
-);
-
--- 3. MARKET CONTEXT (Aggregated Market Data + Sentiment Stats)
+ -- 2. MARKET CONTEXT (Aggregated Market Data + Sentiment Stats)
 -- This stores the "big picture" view that the agent uses
 -- WRITTEN BY: Data Ingest Worker (every 10s) - everything except risk_score
 -- UPDATED BY: Monitor Worker (every 1s) - calculates and updates risk_score

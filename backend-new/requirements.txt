@@ -7,8 +7,7 @@ websockets==14.1
 supabase==2.10.0
 
 # AI/ML
-openai==1.57.4
-
+openai==1.57.4  # current latest
 
 # Voice
 elevenlabs==1.12.0

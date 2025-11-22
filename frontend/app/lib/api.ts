@@ -42,6 +42,8 @@ export interface PortfolioData {
   pnl_total: number;
   pnl_percent: number;
   is_locked: boolean;
+  lock_reason?: string | null;
+  lock_expires_at?: string | null;
 }
 
 export interface Position {
@@ -61,8 +63,9 @@ export interface Order {
   order_type: string;
   amount: number;
   limit_price: number | null;
-  created_at: string;
+  created_at: string | null;
   placed_ago: string;
+  status?: string;
 }
 
 export interface TradeHistory {
@@ -73,7 +76,7 @@ export interface TradeHistory {
   entry_price: number;
   exit_price: number;
   pnl: number;
-  filled_at: string;
+  filled_at: string | null;
   time_ago: string;
 }
 
@@ -110,7 +113,7 @@ export interface CreateOrderRequest {
 }
 
 export interface ClosePositionRequest {
-  current_price: number;
+  qty?: number;
 }
 
 export interface AdjustPositionRequest {
@@ -197,17 +200,17 @@ class ApiService {
     return this.fetch<Position[]>('/api/positions');
   }
 
-  async adjustPosition(positionId: string, data: AdjustPositionRequest): Promise<Position> {
-    return this.fetch<Position>(`/api/positions/${positionId}`, {
+  async adjustPosition(symbol: string, data: AdjustPositionRequest): Promise<Position> {
+    return this.fetch<Position>(`/api/positions/${symbol}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
       showSuccessToast: true,
-      successMessage: 'Position updated successfully',
+      successMessage: 'Position adjusted',
     });
   }
 
-  async closePosition(positionId: string, data: ClosePositionRequest): Promise<any> {
-    return this.fetch(`/api/positions/${positionId}/close`, {
+  async closePosition(symbol: string, data: ClosePositionRequest): Promise<any> {
+    return this.fetch(`/api/positions/${symbol}/close`, {
       method: 'POST',
       body: JSON.stringify(data),
       showSuccessToast: true,

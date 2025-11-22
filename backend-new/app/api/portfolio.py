@@ -1,15 +1,13 @@
 """
-Portfolio endpoints
-GET /api/portfolio - Get current portfolio state
-GET /api/positions - Get open positions
-PATCH /api/positions/{position_id} - Adjust position size
-POST /api/positions/{position_id}/close - Close position
-GET /api/history - Get trade history
+Portfolio endpoints backed by Alpaca
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional, Dict
+
 from app.services.supabase import get_supabase
-from typing import Optional
+from app.services.alpaca_trading import trading_service
+from app.services.alpaca import alpaca_service
 
 router = APIRouter()
 
@@ -19,228 +17,154 @@ class AdjustPositionRequest(BaseModel):
 
 
 class ClosePositionRequest(BaseModel):
-    current_price: float
+    qty: Optional[float] = None
+
+
+def _format_symbol(symbol: str) -> str:
+    if "/" in symbol:
+        return symbol
+    if symbol.endswith("USD") and len(symbol) > 3:
+        return f"{symbol[:-3]}/USD"
+    return symbol
+
+
+def _get_lock_state() -> Dict[str, Optional[str]]:
+    db = get_supabase()
+    result = db.table("portfolio").select("is_locked, lock_reason, lock_expires_at").limit(1).execute()
+    if result.data:
+        return result.data[0]
+    return {"is_locked": False, "lock_reason": None, "lock_expires_at": None}
 
 
 @router.get("/portfolio")
 async def get_portfolio():
-    """Get current portfolio state with total value and P&L"""
-    db = get_supabase()
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Get portfolio row
-    portfolio_result = db.table("portfolio").select("*").limit(1).execute()
+    account = await trading_service.get_account()
+    if not account:
+        raise HTTPException(status_code=500, detail="Failed to fetch Alpaca account")
 
-    if not portfolio_result.data:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
+    lock_state = _get_lock_state()
 
-    portfolio = portfolio_result.data[0]
-    balance_usd = float(portfolio["balance_usd"])
+    balance = float(account.get("cash", 0))
+    portfolio_value = float(account.get("portfolio_value", balance))
+    equity = float(account.get("equity", portfolio_value))
+    last_equity = float(account.get("last_equity", equity))
 
-    # Get all open positions to calculate total value
-    positions_result = db.table("trades")\
-        .select("*")\
-        .eq("status", "OPEN")\
-        .not_.is_("entry_price", "null")\
-        .execute()
-
-    # Calculate total position value and P&L
-    # Note: This is a simplified calculation. In production, you'd fetch current prices
-    # For now, we'll use the stored pnl values
-    total_pnl = sum(float(pos.get("pnl", 0)) for pos in positions_result.data)
-
-    # Total value = balance + current position values
-    # For simplicity, assuming position value = initial investment + pnl
-    position_values = 0
-    for pos in positions_result.data:
-        entry_value = float(pos["entry_price"]) * float(pos["amount"])
-        position_values += entry_value
-
-    total_value = balance_usd + position_values + total_pnl
-
-    # Calculate P&L percentage
-    initial_value = 50000.00  # From schema seed
-    pnl_percent = ((total_value - initial_value) / initial_value) * 100 if initial_value > 0 else 0
+    pnl_total = equity - last_equity
+    pnl_percent = (pnl_total / last_equity * 100) if last_equity else 0
 
     return {
-        "balance_usd": balance_usd,
-        "total_value": round(total_value, 2),
-        "pnl_total": round(total_pnl, 2),
+        "balance_usd": round(balance, 2),
+        "total_value": round(portfolio_value, 2),
+        "pnl_total": round(pnl_total, 2),
         "pnl_percent": round(pnl_percent, 2),
-        "is_locked": portfolio["is_locked"]
+        "is_locked": lock_state.get("is_locked", False),
+        "lock_reason": lock_state.get("lock_reason"),
+        "lock_expires_at": lock_state.get("lock_expires_at")
     }
 
 
 @router.get("/positions")
 async def get_positions():
-    """Get all open positions"""
-    db = get_supabase()
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    result = db.table("trades")\
-        .select("*")\
-        .eq("status", "OPEN")\
-        .not_.is_("entry_price", "null")\
-        .order("created_at", desc=True)\
-        .execute()
+    positions = await trading_service.get_positions()
+    formatted = []
 
-    positions = []
-    for trade in result.data:
-        # Note: current_price and pnl calculation should be done with real-time prices
-        # For now, we'll return the stored values
-        side = "LONG" if trade["side"] == "BUY" else "SHORT"
+    for pos in positions:
+        symbol = _format_symbol(pos["symbol"])
+        clean_symbol = pos["symbol"].replace("/", "")
+        live_price = alpaca_service.get_price(clean_symbol) or pos.get("live_price") or pos.get("current_price")
+        entry_price = float(pos.get("avg_entry_price", 0))
 
-        positions.append({
-            "id": trade["id"],
-            "ticker": trade["ticker"].replace("-", "/"),  # Convert BTC-USD to BTC/USD
-            "side": side,
-            "amount": float(trade["amount"]),
-            "entry_price": float(trade["entry_price"]),
-            "current_price": float(trade["entry_price"]),  # TODO: Fetch real-time price
-            "pnl": float(trade.get("pnl", 0)),
-            "pnl_percent": 0  # TODO: Calculate with real-time price
+        pnl = trading_service.calculate_pnl(
+            side=pos["side"],
+            qty=float(pos["qty"]),
+            entry_price=entry_price,
+            current_price=float(live_price or entry_price)
+        )
+
+        formatted.append({
+            "id": pos["symbol"],
+            "ticker": symbol,
+            "side": pos["side"],
+            "amount": float(pos["qty"]),
+            "entry_price": entry_price,
+            "current_price": float(live_price or entry_price),
+            "pnl": round(pnl["pnl"], 2),
+            "pnl_percent": round(pnl["pnl_percent"], 2)
         })
 
-    return positions
+    return formatted
 
 
-@router.patch("/positions/{position_id}")
-async def adjust_position(position_id: str, request: AdjustPositionRequest):
-    """Adjust the size of an open position"""
-    db = get_supabase()
+@router.patch("/positions/{symbol}")
+async def adjust_position(symbol: str, request: AdjustPositionRequest):
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Verify position exists and is open
-    check_result = db.table("trades")\
-        .select("*")\
-        .eq("id", position_id)\
-        .eq("status", "OPEN")\
-        .not_.is_("entry_price", "null")\
-        .execute()
+    position = await trading_service.get_position(symbol)
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
 
-    if not check_result.data:
-        raise HTTPException(status_code=404, detail="Open position not found")
+    current_qty = float(position["qty"])
+    delta = request.amount - current_qty
 
-    # Update position size
-    result = db.table("trades")\
-        .update({"amount": request.amount})\
-        .eq("id", position_id)\
-        .execute()
+    if abs(delta) < 1e-8:
+        return position
 
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to update position")
+    side = position["side"].upper()
+    if delta > 0:
+        order_side = "buy" if side == "LONG" else "sell"
+        await trading_service.place_market_order(symbol, abs(delta), order_side)
+    else:
+        order_side = "sell" if side == "LONG" else "buy"
+        await trading_service.place_market_order(symbol, abs(delta), order_side)
 
-    updated_position = result.data[0]
-    side = "LONG" if updated_position["side"] == "BUY" else "SHORT"
+    updated = await trading_service.get_position(symbol)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to adjust position")
 
-    return {
-        "id": updated_position["id"],
-        "ticker": updated_position["ticker"].replace("-", "/"),
-        "side": side,
-        "amount": float(updated_position["amount"]),
-        "entry_price": float(updated_position["entry_price"]),
-        "message": "Position size updated successfully"
-    }
+    updated["ticker"] = _format_symbol(updated["symbol"])
+    return updated
 
 
-@router.post("/positions/{position_id}/close")
-async def close_position(position_id: str, request: ClosePositionRequest):
-    """Close an open position and update portfolio balance"""
-    db = get_supabase()
+@router.post("/positions/{symbol}/close")
+async def close_position(symbol: str, request: ClosePositionRequest):
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    # Get the position
-    position_result = db.table("trades")\
-        .select("*")\
-        .eq("id", position_id)\
-        .eq("status", "OPEN")\
-        .not_.is_("entry_price", "null")\
-        .execute()
-
-    if not position_result.data:
-        raise HTTPException(status_code=404, detail="Open position not found")
-
-    position = position_result.data[0]
-
-    # Calculate P&L
-    entry_price = float(position["entry_price"])
-    amount = float(position["amount"])
-    current_price = request.current_price
-
-    if position["side"] == "BUY":  # LONG position
-        pnl = (current_price - entry_price) * amount
-    else:  # SHORT position
-        pnl = (entry_price - current_price) * amount
-
-    # Update trade to FILLED
-    from datetime import datetime
-    update_result = db.table("trades")\
-        .update({
-            "status": "FILLED",
-            "exit_price": current_price,
-            "pnl": pnl,
-            "filled_at": datetime.utcnow().isoformat()
-        })\
-        .eq("id", position_id)\
-        .execute()
-
-    if not update_result.data:
+    success = await trading_service.close_position(symbol, request.qty)
+    if not success:
         raise HTTPException(status_code=500, detail="Failed to close position")
 
-    # Update portfolio balance
-    portfolio_result = db.table("portfolio")\
-        .select("balance_usd")\
-        .limit(1)\
-        .execute()
-
-    if portfolio_result.data:
-        current_balance = float(portfolio_result.data[0]["balance_usd"])
-        new_balance = current_balance + pnl
-
-        db.table("portfolio")\
-            .update({"balance_usd": new_balance})\
-            .eq("id", portfolio_result.data[0]["id"])\
-            .execute()
-
-    closed_position = update_result.data[0]
-    side = "LONG" if closed_position["side"] == "BUY" else "SHORT"
-
-    return {
-        "id": closed_position["id"],
-        "ticker": closed_position["ticker"].replace("-", "/"),
-        "side": side,
-        "amount": float(closed_position["amount"]),
-        "entry_price": entry_price,
-        "exit_price": current_price,
-        "pnl": round(pnl, 2),
-        "pnl_percent": round((pnl / (entry_price * amount)) * 100, 2) if entry_price * amount > 0 else 0,
-        "filled_at": closed_position["filled_at"],
-        "message": "Position closed successfully"
-    }
+    return {"success": True, "message": f"Closed {symbol}"}
 
 
 @router.get("/history")
 async def get_history():
-    """Get trade history (filled trades)"""
-    db = get_supabase()
+    if not trading_service.is_enabled():
+        raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-    result = db.table("trades")\
-        .select("*")\
-        .eq("status", "FILLED")\
-        .order("filled_at", desc=True)\
-        .limit(50)\
-        .execute()
-
+    orders = await trading_service.get_orders(status="closed", limit=50)
     history = []
-    for trade in result.data:
-        side = "LONG" if trade["side"] == "BUY" else "SHORT"
 
+    for order in orders:
+        if not order.get("filled_at"):
+            continue
         history.append({
-            "id": trade["id"],
-            "ticker": trade["ticker"].replace("-", "/"),
-            "side": side,
-            "amount": float(trade["amount"]),
-            "entry_price": float(trade["entry_price"]) if trade["entry_price"] else 0,
-            "exit_price": float(trade["exit_price"]) if trade["exit_price"] else 0,
-            "pnl": float(trade.get("pnl", 0)),
-            "filled_at": trade["filled_at"],
-            "time_ago": ""  # TODO: Calculate time ago on frontend or here
+            "id": order["id"],
+            "ticker": _format_symbol(order["symbol"]),
+            "side": order["side"].upper(),
+            "amount": float(order.get("filled_qty") or order.get("qty") or 0),
+            "entry_price": float(order.get("filled_avg_price") or order.get("limit_price") or 0),
+            "exit_price": float(order.get("filled_avg_price") or order.get("limit_price") or 0),
+            "pnl": 0.0,
+            "filled_at": order.get("filled_at"),
+            "time_ago": ""
         })
 
     return history

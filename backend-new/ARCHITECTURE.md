@@ -56,38 +56,19 @@ Perfect. Let me regenerate the complete architecture with:
 
 ---
 
-### Table: `trades`
-**Purpose**: The order book (both pending and historical)
+### Alpaca Paper Trading (Source of truth)
+All live trading data now comes from Alpaca's paper account.
 
-**What it stores**:
-- `ticker` - "BTC-USD", "ETH-USD"
-- `side` - "BUY" or "SELL"
-- `order_type` - "MARKET", "LIMIT", "STOP_LOSS"
-- `amount` - Quantity (e.g., 0.5 BTC)
-- `limit_price` - NULL for market orders, price for limit/stop
-- `status` - "PENDING_APPROVAL" → "OPEN" → "FILLED" or "CANCELLED"
+**What it provides**:
+- Real orders (market/limit/stop) with true fill status
+- Open positions with P&L
+- Account equity/balance/buying power
+- Closed orders for history view
 
-**Status Flow**:
-```
-PENDING_APPROVAL  (Agent called execute_trade, waiting for user)
-      ↓
-    OPEN          (User approved, order is active)
-      ↓
-   FILLED         (Order executed, balance updated)
-      
-   CANCELLED      (User or agent cancelled before fill)
-```
-
-**Who writes to it**:
-- `POST /api/orders` - Manual orders from UI (go straight to OPEN)
-- `execute_trade()` tool - Agent orders (start as PENDING_APPROVAL)
-- `DELETE /api/orders/{id}` - Sets status to CANCELLED
-
-**Who reads from it**:
-- `GET /api/orders` - Frontend displays active orders table
-- `list_holdings()` tool - Agent sees open positions
-
----
+**How we access it**:
+- `app/services/alpaca.py` streams prices for BTC/USD, equities, etc.
+- `app/services/alpaca_trading.py` wraps the Trading API (place orders, get positions, cancel orders)
+- `/api/orders`, `/api/portfolio`, `/api/positions`, `/api/history` all proxy these services
 
 ### Table: `market_context`
 **Purpose**: Time-series storage of processed market analysis
