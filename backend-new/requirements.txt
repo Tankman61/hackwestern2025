@@ -8,6 +8,11 @@ supabase==2.10.0
 
 # AI/ML
 openai==1.57.4  # current latest
+langchain==0.3.14
+langchain-openai==0.2.14
+langchain-core==0.3.28
+langgraph==0.2.59
+langgraph-checkpoint==2.0.11
 
 # Voice
 elevenlabs==1.12.0
