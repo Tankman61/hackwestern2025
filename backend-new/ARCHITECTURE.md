@@ -534,17 +534,16 @@ UPDATE portfolio SET
 ```json
 {
   "type": "INTERRUPT",
-  "audio_url": "/assets/anime_scream.mp3",
   "message": "MARKET CRASHING! STOP EVERYTHING!"
 }
 ```
 - **When**: Trigger Monitor detects risk_score > 80
-- **Action**: 
+- **Action**:
   1. Frontend stops any playing audio
   2. Clears audio queue
-  3. Plays scream audio immediately
-  4. Flashes screen red
-  5. System message injected into agent conversation
+  3. Flashes screen red
+  4. System message injected into agent conversation
+  5. Agent generates urgent response with audio tags
 
 ---
 
@@ -693,56 +692,26 @@ def enhance_agent_text(text: str, context: dict) -> str:
 
 ---
 
-### Pre-Generated Emergency Audio
-
-**Purpose**: Zero-latency interrupts for demo impact
-
-**Files to Pre-Generate**:
-1. `assets/scream_crash.mp3` - "YAMERO!!! MARKET CRASHING!"
-2. `assets/scream_buy_top.mp3` - "BAKA! You're buying the TOP!"
-3. `assets/lock_warning.mp3` - "I'm LOCKING your account!"
-
-**How to Generate**:
-1. Go to ElevenLabs playground
-2. Select aggressive anime voice
-3. Input: "[screaming] YAMERO!!! THE MARKET IS CRASHING!!!"
-4. Download MP3
-5. Place in `backend/assets/`
-
-**When to Use**:
-- **Trigger Monitor** detects risk_score > 90 → Plays pre-gen scream immediately
-- Then follows up with contextual LLM-generated explanation
-
-**Why Pre-Generate**:
-- TTS generation takes 200-500ms
-- Pre-gen audio plays in <50ms
-- Creates "jump scare" effect for demo
-
----
 
 ### Interruption Handling (Voice-Specific)
 
 **Server-Side Interrupt**:
 ```python
 async def trigger_crash_interrupt(ws_manager):
-    # 1. Play pre-generated scream (instant)
+    # 1. Cancel any ongoing TTS generation
+    elevenlabs_client.cancel_current_generation()
+
+    # 2. Generate urgent alert with context
+    context = get_latest_market_context()
+    text = f"[panicked] [shouting] Bitcoin dumping {context['price_change_24h']}%! Polymarket odds collapsed!"
+
+    # 3. Generate audio with tags
+    audio = await elevenlabs_client.generate(text)
+
+    # 4. Send interrupt with generated audio
     await ws_manager.broadcast({
         "type": "INTERRUPT",
-        "audio_url": "/assets/scream_crash.mp3"
-    })
-    
-    # 2. Cancel any ongoing TTS generation
-    elevenlabs_client.cancel_current_generation()
-    
-    # 3. Generate contextual follow-up
-    context = get_latest_market_context()
-    text = f"[panicked] Bitcoin dumping {context['price_change_24h']}%! Polymarket odds collapsed!"
-    audio = await elevenlabs_client.generate(text)
-    
-    # 4. Stream follow-up
-    await ws_manager.broadcast({
-        "type": "AGENT_AUDIO",
-        "data": audio,
+        "audio": audio,
         "text": text
     })
 ```
@@ -779,11 +748,10 @@ async def handle_user_interrupt():
 ```json
 {
   "type": "INTERRUPT",
-  "audio_url": "/assets/scream_crash.mp3",
   "message": "URGENT: Bitcoin dumping! Polymarket whales exiting!"
 }
 ```
-5. Frontend receives → Stops audio → Plays scream → Flashes screen
+5. Frontend receives → Stops current audio → Flashes screen
 6. Monitor injects System Message into Agent:
 ```
 SYSTEM_ALERT: risk_score=92. Bitcoin down 5% in 10 minutes. Polymarket odds collapsed 15%. Reddit sentiment: PANIC. Keywords: Liquidation, Rekt, Dump. INTERVENE IMMEDIATELY.
