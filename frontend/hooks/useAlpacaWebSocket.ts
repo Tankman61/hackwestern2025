@@ -54,13 +54,21 @@ export function useAlpacaWebSocket({
   useEffect(() => {
     if (!wsRef.current || !autoConnect) return;
 
+    console.log(`🔌 Connecting to ${wsRef.current.dataType} stream for symbols:`, symbols);
     wsRef.current.connect();
 
     if (symbols.length > 0) {
-      // Small delay to ensure connection is established
+      // Subscribe immediately (the WebSocket manager will handle queuing if not connected)
+      // Also set up a delayed subscription in case the connection takes time
+      wsRef.current.subscribe(symbols);
+      
       const timer = setTimeout(() => {
-        wsRef.current?.subscribe(symbols);
-      }, 100);
+        // Retry subscription after connection is established
+        if (wsRef.current?.isConnected()) {
+          console.log(`🔄 Retrying subscription to:`, symbols);
+          wsRef.current.subscribe(symbols);
+        }
+      }, 500);
 
       return () => clearTimeout(timer);
     }

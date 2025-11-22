@@ -47,14 +47,26 @@ export interface PortfolioData {
 }
 
 export interface Position {
-  id: string;
-  ticker: string;
-  side: 'LONG' | 'SHORT';
-  amount: number;
-  entry_price: number;
+  asset_id: string;
+  symbol: string;
+  exchange: string;
+  asset_class: string;
+  avg_entry_price: number;
+  qty: number;
+  qty_available: number;
+  side: 'long' | 'short' | 'LONG' | 'SHORT';
+  market_value: number;
+  cost_basis: number;
+  unrealized_pl: number;
+  unrealized_plpc: number;
+  unrealized_intraday_pl: number;
+  unrealized_intraday_plpc: number;
   current_price: number;
-  pnl: number;
-  pnl_percent: number;
+  lastday_price: number;
+  change_today: number;
+  live_price?: number;
+  live_pnl?: number;
+  live_pnl_percent?: number;
 }
 
 export interface Order {
@@ -197,7 +209,9 @@ class ApiService {
   }
 
   async getPositions(): Promise<Position[]> {
-    return this.fetch<Position[]>('/api/positions');
+    const response = await this.fetch<{ positions: Position[] } | Position[]>('/api/positions');
+    // Handle both array and object with positions property
+    return Array.isArray(response) ? response : (response as any).positions || [];
   }
 
   async adjustPosition(symbol: string, data: AdjustPositionRequest): Promise<Position> {
@@ -225,7 +239,9 @@ class ApiService {
   // ==================== ORDERS ====================
 
   async getOrders(): Promise<Order[]> {
-    return this.fetch<Order[]>('/api/orders');
+    const response = await this.fetch<{ orders: Order[] } | Order[]>('/api/orders');
+    // Handle both array and object with orders property
+    return Array.isArray(response) ? response : (response as any).orders || [];
   }
 
   async createOrder(data: CreateOrderRequest): Promise<any> {

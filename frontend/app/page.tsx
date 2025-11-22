@@ -15,6 +15,7 @@ import OptionsHoldings from "./components/holdings/OptionsHoldings";
 import ETFsHoldings from "./components/holdings/ETFsHoldings";
 import PolymarketPanel from "./components/PolymarketPanel";
 import TradingPanel from "./components/TradingPanel";
+import LiveAlpacaChart from "./components/LiveAlpacaChart";
 import { api, type RedditPost, type SentimentStats } from "@/app/lib/api";
 
 type PortfolioView = "crypto" | "stocks" | "options" | "etfs" | null;
@@ -237,15 +238,8 @@ export default function Home() {
           {activePortfolio === null && activeHoldings === null ? (
             <>
               {/* Main Chart Area */}
-              <div className="flex-1 border-r" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-                <div className="flex h-full items-center justify-center flex-col gap-4 p-8">
-                  <Text size="6" weight="bold" style={{ color: 'var(--slate-11)' }}>
-                    BTC/USD LIVE CHART
-                  </Text>
-                  <Text size="2" style={{ color: 'var(--slate-9)' }}>
-                    TradingView Widget Integration Point
-                  </Text>
-                </div>
+              <div className="flex-1 border-r p-6" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+                <LiveAlpacaChart symbol="BTC" dataType="crypto" />
               </div>
 
               {/* Bottom Data Panels */}

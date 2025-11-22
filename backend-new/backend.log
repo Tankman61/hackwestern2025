@@ -1,0 +1,9 @@
+INFO:     Will watch for changes in these directories: ['/Users/jstwx07/Desktop/projects/HackWestern/hackwestern2025/backend-new']
+ERROR:    [Errno 48] Address already in use
+
+╔══════════════════════════════════════════╗
+║     VibeTrade API Starting...            ║
+║     Host: 0.0.0.0                        ║
+║     Port: 8000                           ║
+╚══════════════════════════════════════════╝
+    

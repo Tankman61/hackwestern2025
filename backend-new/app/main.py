@@ -1,13 +1,14 @@
 """
 FastAPI main application entry point
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.services.alpaca import alpaca_service
-from app.services.alpaca_trading import trading_service
+from app.services.finnhub import finnhub_service
+from app.services.alpaca_trading import trading_service  # Alpaca only for trading, not market data
 from app.api.market_websocket import router as market_ws_router, broadcast_price_update
 from app.api.trading import router as trading_router
 from app.api.portfolio import router as portfolio_router
@@ -28,16 +29,21 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting VibeTrade API...")
     
-    # Register price update callback with Alpaca service
-    alpaca_service.add_price_update_callback(broadcast_price_update)
-    logger.info("Alpaca market data service initialized")
+    # Get the FastAPI event loop and store it in the market data service
+    loop = asyncio.get_event_loop()
+    
+    # Initialize Finnhub service for all market data display
+    # Note: Alpaca is only used for trading execution, not market data
+    finnhub_service.set_fastapi_loop(loop)
+    finnhub_service.add_price_update_callback(broadcast_price_update)
+    logger.info("Finnhub market data service initialized (all market data display)")
     
     yield
     
     # Shutdown
     logger.info("Shutting down VibeTrade API...")
-    await alpaca_service.stop()
-    logger.info("Alpaca market data service stopped")
+    await finnhub_service.stop()
+    logger.info("Market data service stopped")
 
 
 app = FastAPI(
@@ -74,14 +80,16 @@ async def health():
     
     return {
         "status": "healthy",
-        "alpaca_market_data": {
-            "connected": len(alpaca_service.live_prices) > 0,
-            "tracked_symbols": len(alpaca_service.live_prices)
+        "finnhub_market_data": {
+            "connected": len(finnhub_service.live_prices) > 0,
+            "tracked_symbols": len(finnhub_service.live_prices),
+            "note": "Finnhub used for all market data display"
         },
         "alpaca_trading": {
             "enabled": trading_service.is_enabled(),
             "paper_trading": trading_service.paper if trading_service.is_enabled() else None,
-            "account_value": float(account["portfolio_value"]) if account else None
+            "account_value": float(account["portfolio_value"]) if account else None,
+            "note": "Alpaca used only for trading execution"
         }
     }
 

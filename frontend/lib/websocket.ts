@@ -64,17 +64,21 @@ class AlpacaWebSocketManager {
       this.ws = new WebSocket(`${this.baseUrl}/ws/alpaca/${this.dataType}`);
 
       this.ws.onopen = () => {
-        console.log(`WebSocket connected to Alpaca ${this.dataType} stream`);
+        console.log(`✅ WebSocket connected to ${this.dataType} stream`);
         this.reconnectAttempts = 0;
         
         // Resubscribe to symbols if reconnecting
         if (this.subscribedSymbols.size > 0) {
-          this.subscribe(Array.from(this.subscribedSymbols));
+          console.log(`🔄 Resubscribing to symbols:`, Array.from(this.subscribedSymbols));
+          // Small delay to ensure connection is fully ready
+          setTimeout(() => {
+            this.subscribe(Array.from(this.subscribedSymbols));
+          }, 100);
         }
 
         this.notifyHandlers({
           type: 'connected',
-          message: `Connected to Alpaca ${this.dataType} stream`
+          message: `Connected to ${this.dataType} stream`
         });
       };
 
@@ -84,6 +88,7 @@ class AlpacaWebSocketManager {
           this.notifyHandlers(message);
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
+          console.error('Raw data that failed to parse:', event.data);
         }
       };
 
@@ -124,14 +129,14 @@ class AlpacaWebSocketManager {
   }
 
   subscribe(symbols: string[]) {
+    symbols.forEach(symbol => this.subscribedSymbols.add(symbol));
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket not connected. Symbols will be subscribed upon connection.');
-      symbols.forEach(symbol => this.subscribedSymbols.add(symbol));
+      console.warn(`⏳ WebSocket not connected. Symbols [${symbols.join(', ')}] will be subscribed upon connection.`);
       return;
     }
 
-    symbols.forEach(symbol => this.subscribedSymbols.add(symbol));
-
+    console.log(`📡 Subscribing to symbols:`, symbols);
     this.ws.send(JSON.stringify({
       action: 'subscribe',
       symbols: symbols

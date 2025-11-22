@@ -18,15 +18,39 @@ export interface LineChartDataPoint {
 
 /**
  * Transform Alpaca bar data to lightweight-charts candlestick format
+ * Lightweight-charts expects Unix timestamp in seconds
  */
 export function transformBarToChartData(bar: AlpacaBar): ChartDataPoint {
+  // Ensure timestamp is in seconds (not milliseconds)
+  // If timestamp is in milliseconds, divide by 1000
+  let timestamp: number;
+  
+  if (typeof bar.timestamp === 'number') {
+    timestamp = bar.timestamp > 1e10 ? Math.floor(bar.timestamp / 1000) : bar.timestamp;
+  } else if (typeof bar.timestamp === 'string') {
+    timestamp = parseInt(bar.timestamp, 10);
+    if (timestamp > 1e10) {
+      timestamp = Math.floor(timestamp / 1000);
+    }
+  } else {
+    // Fallback to current time if timestamp is invalid
+    console.error('Invalid timestamp type:', typeof bar.timestamp, bar.timestamp);
+    timestamp = Math.floor(Date.now() / 1000);
+  }
+  
+  // Ensure timestamp is a valid number
+  if (isNaN(timestamp) || !isFinite(timestamp)) {
+    console.error('Invalid timestamp value:', bar.timestamp, 'converted to:', timestamp);
+    timestamp = Math.floor(Date.now() / 1000);
+  }
+  
   return {
-    time: bar.timestamp,
-    open: bar.open,
-    high: bar.high,
-    low: bar.low,
-    close: bar.close,
-    volume: bar.volume
+    time: timestamp,
+    open: Number(bar.open),
+    high: Number(bar.high),
+    low: Number(bar.low),
+    close: Number(bar.close),
+    volume: bar.volume ? Number(bar.volume) : 0
   };
 }
 

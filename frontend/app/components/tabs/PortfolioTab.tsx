@@ -93,32 +93,32 @@ export default function PortfolioTab() {
         ) : (
           <div className="space-y-2 mb-4">
             {positions.map((position) => (
-              <div key={position.id} className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+              <div key={position.asset_id} className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
                 <Flex justify="between" align="center" className="mb-1">
-                  <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{position.ticker}</Text>
+                  <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{position.symbol}</Text>
                   <Badge size="1" style={{
-                    background: position.side === 'LONG' ? 'var(--green-4)' : 'var(--red-4)',
-                    color: position.side === 'LONG' ? 'var(--green-11)' : 'var(--red-10)'
+                    background: position.side.toUpperCase() === 'LONG' ? 'var(--green-4)' : 'var(--red-4)',
+                    color: position.side.toUpperCase() === 'LONG' ? 'var(--green-11)' : 'var(--red-10)'
                   }}>
-                    {position.side}
+                    {position.side.toUpperCase()}
                   </Badge>
                 </Flex>
                 <Flex justify="between" className="mb-0.5">
                   <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
                   <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>
-                    {position.amount} {position.ticker.split('/')[0]}
+                    {position.qty.toFixed(6)} {position.symbol.replace('USD', '')}
                   </Text>
                 </Flex>
                 <Flex justify="between" className="mb-0.5">
                   <Text size="1" style={{ color: 'var(--slate-11)' }}>Entry</Text>
                   <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>
-                    ${position.entry_price.toLocaleString()}
+                    ${position.avg_entry_price.toLocaleString()}
                   </Text>
                 </Flex>
                 <Flex justify="between">
                   <Text size="1" style={{ color: 'var(--slate-11)' }}>P&L</Text>
-                  <Text size="1" weight="bold" className="font-mono" style={{ color: position.pnl >= 0 ? 'var(--green-11)' : 'var(--red-10)' }}>
-                    {position.pnl >= 0 ? '+' : ''}${position.pnl.toFixed(2)}
+                  <Text size="1" weight="bold" className="font-mono" style={{ color: (position.live_pnl ?? position.unrealized_pl) >= 0 ? 'var(--green-11)' : 'var(--red-10)' }}>
+                    {(position.live_pnl ?? position.unrealized_pl) >= 0 ? '+' : ''}${(position.live_pnl ?? position.unrealized_pl).toFixed(2)}
                   </Text>
                 </Flex>
               </div>
