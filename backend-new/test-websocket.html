@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alpaca WebSocket Test</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Courier New', monospace;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 {
+            color: #4ec9b0;
+        }
+        .section {
+            background: #252526;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border: 1px solid #3e3e42;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button:disabled {
+            background: #3e3e42;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin: 5px;
+        }
+        .status.connected {
+            background: #4ec9b0;
+            color: #1e1e1e;
+        }
+        .status.disconnected {
+            background: #f48771;
+            color: #1e1e1e;
+        }
+        #log {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px;
+        }
+        .log-connected {
+            color: #4ec9b0;
+        }
+        .log-bar {
+            color: #dcdcaa;
+        }
+        .log-trade {
+            color: #569cd6;
+        }
+        .log-error {
+            color: #f48771;
+        }
+        .log-subscribe {
+            color: #c586c0;
+        }
+        .prices {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .price-card {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 3px;
+            border: 1px solid #3e3e42;
+        }
+        .symbol {
+            color: #4ec9b0;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .price {
+            color: #dcdcaa;
+            font-size: 20px;
+            margin: 5px 0;
+        }
+        .time {
+            color: #858585;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Alpaca WebSocket Integration Test</h1>
+    
+    <div class="section">
+        <h2>Connection Status</h2>
+        <div>
+            <span class="status disconnected" id="cryptoStatus">Crypto: Disconnected</span>
+            <span class="status disconnected" id="stocksStatus">Stocks: Disconnected</span>
+        </div>
+        <div style="margin-top: 10px;">
+            <button onclick="connectCrypto()">Connect Crypto</button>
+            <button onclick="connectStocks()">Connect Stocks</button>
+            <button onclick="disconnectAll()">Disconnect All</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Subscribe to Symbols</h2>
+        <div>
+            <button onclick="subscribeCrypto(['BTC', 'ETH', 'SOL'])">Subscribe Crypto (BTC, ETH, SOL)</button>
+            <button onclick="subscribeStocks(['AAPL', 'GOOGL', 'TSLA'])">Subscribe Stocks (AAPL, GOOGL, TSLA)</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Live Prices</h2>
+        <div class="prices" id="prices"></div>
+    </div>
+
+    <div class="section">
+        <h2>Message Log</h2>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let cryptoWs = null;
+        let stocksWs = null;
+        const prices = {};
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(type, connected) {
+            const statusEl = document.getElementById(`${type}Status`);
+            statusEl.textContent = `${type.charAt(0).toUpperCase() + type.slice(1)}: ${connected ? 'Connected' : 'Disconnected'}`;
+            statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function updatePrice(symbol, data) {
+            prices[symbol] = {
+                price: data.close || data.price,
+                timestamp: new Date(data.timestamp * 1000)
+            };
+            renderPrices();
+        }
+
+        function renderPrices() {
+            const pricesDiv = document.getElementById('prices');
+            pricesDiv.innerHTML = '';
+            
+            Object.entries(prices).forEach(([symbol, data]) => {
+                const card = document.createElement('div');
+                card.className = 'price-card';
+                card.innerHTML = `
+                    <div class="symbol">${symbol}</div>
+                    <div class="price">$${data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                    <div class="time">${data.timestamp.toLocaleTimeString()}</div>
+                `;
+                pricesDiv.appendChild(card);
+            });
+        }
+
+        function connectCrypto() {
+            if (cryptoWs && cryptoWs.readyState === WebSocket.OPEN) {
+                log('Crypto WebSocket already connected', 'info');
+                return;
+            }
+
+            log('Connecting to crypto WebSocket...', 'info');
+            cryptoWs = new WebSocket('ws://localhost:8000/ws/alpaca/crypto');
+
+            cryptoWs.onopen = () => {
+                log('Crypto WebSocket connected!', 'connected');
+                updateStatus('crypto', true);
+            };
+
+            cryptoWs.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                if (message.type === 'connected') {
+                    log(`Crypto: ${message.message}`, 'connected');
+                } else if (message.type === 'subscribed') {
+                    log(`Crypto subscribed to: ${message.symbols.join(', ')}`, 'subscribe');
+                } else if (message.type === 'bar') {
+                    log(`Crypto BAR: ${message.data.symbol} @ $${message.data.close}`, 'bar');
+                    updatePrice(message.data.symbol, message.data);
+                } else if (message.type === 'trade') {
+                    log(`Crypto TRADE: ${message.data.symbol} @ $${message.data.price}`, 'trade');
+                    updatePrice(message.data.symbol, message.data);
+                }
+            };
+
+            cryptoWs.onerror = (error) => {
+                log('Crypto WebSocket error', 'error');
+                console.error(error);
+            };
+
+            cryptoWs.onclose = () => {
+                log('Crypto WebSocket disconnected', 'error');
+                updateStatus('crypto', false);
+            };
+        }
+
+        function connectStocks() {
+            if (stocksWs && stocksWs.readyState === WebSocket.OPEN) {
+                log('Stocks WebSocket already connected', 'info');
+                return;
+            }
+
+            log('Connecting to stocks WebSocket...', 'info');
+            stocksWs = new WebSocket('ws://localhost:8000/ws/alpaca/stocks');
+
+            stocksWs.onopen = () => {
+                log('Stocks WebSocket connected!', 'connected');
+                updateStatus('stocks', true);
+            };
+
+            stocksWs.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                if (message.type === 'connected') {
+                    log(`Stocks: ${message.message}`, 'connected');
+                } else if (message.type === 'subscribed') {
+                    log(`Stocks subscribed to: ${message.symbols.join(', ')}`, 'subscribe');
+                } else if (message.type === 'bar') {
+                    log(`Stocks BAR: ${message.data.symbol} @ $${message.data.close}`, 'bar');
+                    updatePrice(message.data.symbol, message.data);
+                } else if (message.type === 'trade') {
+                    log(`Stocks TRADE: ${message.data.symbol} @ $${message.data.price}`, 'trade');
+                    updatePrice(message.data.symbol, message.data);
+                }
+            };
+
+            stocksWs.onerror = (error) => {
+                log('Stocks WebSocket error', 'error');
+                console.error(error);
+            };
+
+            stocksWs.onclose = () => {
+                log('Stocks WebSocket disconnected', 'error');
+                updateStatus('stocks', false);
+            };
+        }
+
+        function subscribeCrypto(symbols) {
+            if (!cryptoWs || cryptoWs.readyState !== WebSocket.OPEN) {
+                log('Crypto WebSocket not connected. Connecting...', 'error');
+                connectCrypto();
+                setTimeout(() => subscribeCrypto(symbols), 1000);
+                return;
+            }
+
+            cryptoWs.send(JSON.stringify({
+                action: 'subscribe',
+                symbols: symbols
+            }));
+            log(`Subscribing to crypto symbols: ${symbols.join(', ')}`, 'subscribe');
+        }
+
+        function subscribeStocks(symbols) {
+            if (!stocksWs || stocksWs.readyState !== WebSocket.OPEN) {
+                log('Stocks WebSocket not connected. Connecting...', 'error');
+                connectStocks();
+                setTimeout(() => subscribeStocks(symbols), 1000);
+                return;
+            }
+
+            stocksWs.send(JSON.stringify({
+                action: 'subscribe',
+                symbols: symbols
+            }));
+            log(`Subscribing to stock symbols: ${symbols.join(', ')}`, 'subscribe');
+        }
+
+        function disconnectAll() {
+            if (cryptoWs) {
+                cryptoWs.close();
+                cryptoWs = null;
+            }
+            if (stocksWs) {
+                stocksWs.close();
+                stocksWs = null;
+            }
+            log('All connections closed', 'info');
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on load
+        window.onload = () => {
+            log('WebSocket test page loaded', 'info');
+            log('Click "Connect Crypto" or "Connect Stocks" to start', 'info');
+        };
+    </script>
+</body>
+</html>
