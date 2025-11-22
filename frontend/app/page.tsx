@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import { Card, Flex, Heading, Text, Button, Badge, Box, TextField, ScrollArea, TextArea } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ClipboardIcon } from "@radix-ui/react-icons";
 
 export default function Home() {
   const [agentExpanded, setAgentExpanded] = useState(false);
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true); // Always open by default
-  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "orders" | "history">("trade");
   const [riskLevel] = useState<"low" | "medium" | "high">("high"); // Demo: high risk
   const [currentPrice] = useState("98,742.31");
   const [currentTime, setCurrentTime] = useState("");
@@ -139,19 +140,17 @@ export default function Home() {
           </div>
 
           {/* Bottom Data Panels */}
-          <div className="h-64 border-t border-r grid grid-cols-[200px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
-            {/* VTuber Profile Card - SQUARE */}
+          <div className="h-64 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
+            {/* VTuber Profile Card - SQUARE SECTION */}
             <div
-              className="border-r p-4 cursor-pointer"
-              style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}
+              className="border-r cursor-pointer flex items-center justify-center"
+              style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
               onClick={() => setAgentExpanded(!agentExpanded)}
             >
-              <div className="relative w-full h-full flex items-center justify-center">
-                <div className="w-full aspect-square rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
-                  <span className="relative z-10">🎯</span>
-                  <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
-                </div>
+              <div className="w-[200px] h-[200px] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
+                <span className="relative z-10">🎯</span>
+                <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
               </div>
             </div>
 
@@ -166,12 +165,15 @@ export default function Home() {
                   <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>POLYMARKET</Text>
                 </div>
               </Flex>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin" style={{ maxHeight: '200px' }}>
                 {polymarkets.map((market, idx) => (
-                  <div
+                  <a
                     key={idx}
-                    className="p-2 border rounded transition-colors"
-                    style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}
+                    href="https://polymarket.com/event/what-price-will-bitcoin-hit-in-november-2025"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-2 border rounded transition-colors"
+                    style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)', textDecoration: 'none' }}
                     onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--blue-7)'}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--slate-6)'}
                   >
@@ -189,7 +191,7 @@ export default function Home() {
                       </Flex>
                       <Text size="1" style={{ color: 'var(--slate-11)' }}>Vol: {market.volume}</Text>
                     </Flex>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
@@ -208,10 +210,10 @@ export default function Home() {
               </Flex>
 
               {!sentimentExpanded ? (
-                <div className="flex-1 flex flex-col justify-center">
-                  <Flex direction="column" gap="3">
+                <div className="flex-1 flex flex-col justify-center px-2">
+                  <Flex direction="column" gap="4" className="mt-4">
                     <div>
-                      <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Bullish/Bearish Ratio</Text>
+                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Bullish/Bearish Ratio</Text>
                       <Flex align="baseline" gap="2">
                         <Text size="5" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>72</Text>
                         <Text size="2" style={{ color: 'var(--slate-11)' }}>/</Text>
@@ -219,21 +221,25 @@ export default function Home() {
                       </Flex>
                     </div>
                     <div>
-                      <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Sentiment Score</Text>
+                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Sentiment Score</Text>
                       <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+44</Text>
                     </div>
-                    <Text size="1" style={{ color: 'var(--slate-11)' }}>
-                      Click to view recent posts →
-                    </Text>
+                    <div>
+                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Post Volume (24h)</Text>
+                      <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>2.4k</Text>
+                    </div>
                   </Flex>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin" style={{ maxHeight: '200px' }}>
                   {redditPosts.map((post, idx) => (
-                    <div
+                    <a
                       key={idx}
-                      className="p-2 border rounded"
-                      style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}
+                      href="https://reddit.com/r/wallstreetbets"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-2 border rounded"
+                      style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)', textDecoration: 'none' }}
                     >
                       <Flex justify="between" className="mb-1">
                         <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>{post.author}</Text>
@@ -250,7 +256,7 @@ export default function Home() {
                           {post.sentiment}
                         </span>
                       </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               )}
@@ -365,12 +371,13 @@ export default function Home() {
                 </Text>
               </div>
 
+              <div className="flex-1 overflow-y-auto p-3 space-y-4">
               {/* Trade Type */}
-              <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-                <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+              <div>
+                <Text size="1" className="mb-3 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                   Type
                 </Text>
-                <Flex gap="2">
+                <Flex gap="3">
                   <button
                     onClick={() => setTradeType("long")}
                     className="flex-1 py-2 rounded font-medium transition-all"
@@ -397,14 +404,14 @@ export default function Home() {
               </div>
 
               {/* Position Size */}
-              <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+              <div>
                 <Flex justify="between" align="center" className="mb-2">
                   <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                     Size
                   </Text>
-                  <Text size="1" className="font-mono" style={{ color: 'var(--slate-9)' }} title="AI suggests 0.25 based on risk level">
+                  <span className="px-2 py-0.5 rounded text-xs font-mono" style={{ background: 'var(--violet-4)', color: 'var(--violet-11)' }} title="AI suggests 0.25 based on risk level">
                     AI: 0.25
-                  </Text>
+                  </span>
                 </Flex>
                 <input
                   type="text"
@@ -412,7 +419,7 @@ export default function Home() {
                   onChange={(e) => setPositionSize(e.target.value)}
                   className="w-full px-3 py-2 rounded border font-mono outline-none"
                   style={{
-                    background: 'var(--slate-3)',
+                    background: 'var(--slate-4)',
                     borderColor: 'var(--slate-7)',
                     color: 'var(--slate-12)'
                   }}
@@ -425,7 +432,7 @@ export default function Home() {
               </div>
 
               {/* Entry Price */}
-              <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+              <div>
                 <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                   Entry
                 </Text>
@@ -435,7 +442,7 @@ export default function Home() {
                   readOnly
                   className="w-full px-3 py-2 rounded border font-mono"
                   style={{
-                    background: 'var(--slate-3)',
+                    background: 'var(--slate-4)',
                     borderColor: 'var(--slate-6)',
                     color: 'var(--slate-12)',
                     cursor: 'not-allowed'
@@ -447,17 +454,17 @@ export default function Home() {
               </div>
 
               {/* Stop Loss */}
-              <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+              <div>
                 <Flex justify="between" align="center" className="mb-2">
                   <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                     Stop Loss
                   </Text>
                   <button
                     onClick={() => setStopLoss("97,200")}
-                    className="text-xs px-2 py-0.5 rounded transition-colors"
-                    style={{ background: 'var(--slate-4)', color: 'var(--slate-11)' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--slate-5)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--slate-4)'}
+                    className="text-xs px-2 py-0.5 rounded transition-colors font-mono"
+                    style={{ background: 'var(--violet-4)', color: 'var(--violet-11)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--violet-5)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--violet-4)'}
                     title="Use AI suggestion"
                   >
                     AI: 97.2k
@@ -469,7 +476,7 @@ export default function Home() {
                   onChange={(e) => setStopLoss(e.target.value)}
                   className="w-full px-3 py-2 rounded border font-mono outline-none"
                   style={{
-                    background: 'var(--slate-3)',
+                    background: 'var(--slate-4)',
                     borderColor: 'var(--slate-7)',
                     color: 'var(--slate-12)'
                   }}
@@ -479,17 +486,17 @@ export default function Home() {
               </div>
 
               {/* Take Profit */}
-              <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+              <div>
                 <Flex justify="between" align="center" className="mb-2">
                   <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                     Take Profit
                   </Text>
                   <button
                     onClick={() => setTakeProfit("100,500")}
-                    className="text-xs px-2 py-0.5 rounded transition-colors"
-                    style={{ background: 'var(--slate-4)', color: 'var(--slate-11)' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--slate-5)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--slate-4)'}
+                    className="text-xs px-2 py-0.5 rounded transition-colors font-mono"
+                    style={{ background: 'var(--violet-4)', color: 'var(--violet-11)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--violet-5)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--violet-4)'}
                     title="Use AI suggestion"
                   >
                     AI: 100.5k
@@ -501,7 +508,7 @@ export default function Home() {
                   onChange={(e) => setTakeProfit(e.target.value)}
                   className="w-full px-3 py-2 rounded border font-mono outline-none"
                   style={{
-                    background: 'var(--slate-3)',
+                    background: 'var(--slate-4)',
                     borderColor: 'var(--slate-7)',
                     color: 'var(--slate-12)'
                   }}
@@ -511,10 +518,10 @@ export default function Home() {
               </div>
 
               {/* Execute Button */}
-              <div className="p-3 mt-auto">
+              <div className="mt-auto pt-4">
                 <Button
                   size="3"
-                  className="w-full font-bold cursor-pointer"
+                  className="w-full font-bold cursor-pointer flex items-center justify-center"
                   style={{
                     background: tradeType === "long" ? 'var(--green-9)' : 'var(--red-9)',
                     color: 'white'
@@ -529,8 +536,9 @@ export default function Home() {
                   </Text>
                 </Flex>
               </div>
+              </div>
               </>
-              )}
+            )}
 
               {/* Portfolio Tab */}
               {activeTradingTab === "portfolio" && (
@@ -544,29 +552,29 @@ export default function Home() {
 
                   <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
                   {/* Portfolio Summary */}
-                  <div className="mb-4 p-3 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                    <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+                  <div className="mb-4 p-4 rounded border" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                    <Text size="1" className="mb-4 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                       Total Portfolio Value
                     </Text>
-                    <Text size="6" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>
+                    <Text size="6" weight="bold" className="font-mono block mb-3" style={{ color: 'var(--slate-12)' }}>
                       $142,847.23
                     </Text>
-                    <Flex align="center" gap="1" className="mt-1">
+                    <Flex align="center" gap="2">
                       <Text size="2" className="font-mono" style={{ color: 'var(--green-11)' }}>
                         +$8,492.15
                       </Text>
-                      <Text size="1" style={{ color: 'var(--slate-11)' }}>
+                      <Text size="2" style={{ color: 'var(--slate-11)' }}>
                         (6.32%)
                       </Text>
                     </Flex>
                   </div>
 
                   {/* Open Positions */}
-                  <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+                  <Text size="1" className="mb-3 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                     Open Positions
                   </Text>
-                  <div className="space-y-2">
-                    <div className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                  <div className="space-y-3">
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                       <Flex justify="between" align="center" className="mb-1">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
                         <Badge size="1" style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>LONG</Badge>
@@ -585,7 +593,7 @@ export default function Home() {
                       </Flex>
                     </div>
 
-                    <div className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                       <Flex justify="between" align="center" className="mb-1">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>ETH/USD</Text>
                         <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>SHORT</Badge>
@@ -608,6 +616,91 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Open Orders Tab */}
+              {activeTradingTab === "orders" && (
+                <div className="flex flex-col h-full">
+                  {/* Header */}
+                  <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+                    <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>
+                      Open Orders
+                    </Text>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                  <div className="space-y-3">
+                    {/* Limit Order 1 */}
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                      <Flex justify="between" align="center" className="mb-2">
+                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
+                        <Badge size="1" style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>LIMIT BUY</Badge>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>0.3 BTC</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Limit Price</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$97,500</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-2">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>30 min ago</Text>
+                      </Flex>
+                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
+                        Cancel Order
+                      </Button>
+                    </div>
+
+                    {/* Stop-Loss Order */}
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                      <Flex justify="between" align="center" className="mb-2">
+                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>ETH/USD</Text>
+                        <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>STOP-LOSS</Badge>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>1.5 ETH</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Stop Price</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$3,750</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-2">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>2 hours ago</Text>
+                      </Flex>
+                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
+                        Cancel Order
+                      </Button>
+                    </div>
+
+                    {/* Limit Sell Order */}
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                      <Flex justify="between" align="center" className="mb-2">
+                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
+                        <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>LIMIT SELL</Badge>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>0.2 BTC</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-1">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Limit Price</Text>
+                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$100,000</Text>
+                      </Flex>
+                      <Flex justify="between" className="mb-2">
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
+                        <Text size="1" style={{ color: 'var(--slate-11)' }}>1 day ago</Text>
+                      </Flex>
+                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
+                        Cancel Order
+                      </Button>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              )}
+
               {/* History Tab */}
               {activeTradingTab === "history" && (
                 <div className="flex flex-col h-full">
@@ -619,20 +712,20 @@ export default function Home() {
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
-                  <div className="space-y-2">
-                    <div className="p-2.5 border-l-2 rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--green-9)' }}>
-                      <Flex justify="between" align="center" className="mb-1">
+                  <div className="space-y-3">
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                      <Flex justify="between" align="center" className="mb-2">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD LONG</Text>
-                        <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+$2,847</Text>
+                        <Text size="2" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+$2,847</Text>
                       </Flex>
-                      <Flex justify="between" className="mb-0.5">
+                      <Flex justify="between" className="mb-1">
                         <Text size="1" style={{ color: 'var(--slate-11)' }}>Entry: $94,200</Text>
                         <Text size="1" style={{ color: 'var(--slate-11)' }}>Exit: $98,900</Text>
                       </Flex>
                       <Text size="1" style={{ color: 'var(--slate-11)' }}>2 hours ago • 0.6 BTC</Text>
                     </div>
 
-                    <div className="p-2.5 border-l-2 rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--red-9)' }}>
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                       <Flex justify="between" align="center" className="mb-1">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>SOL/USD SHORT</Text>
                         <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--red-10)' }}>-$420</Text>
@@ -644,7 +737,7 @@ export default function Home() {
                       <Text size="1" style={{ color: 'var(--slate-11)' }}>5 hours ago • 30 SOL</Text>
                     </div>
 
-                    <div className="p-2.5 border-l-2 rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--green-9)' }}>
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                       <Flex justify="between" align="center" className="mb-1">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>ETH/USD LONG</Text>
                         <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+$1,240</Text>
@@ -656,7 +749,7 @@ export default function Home() {
                       <Text size="1" style={{ color: 'var(--slate-11)' }}>1 day ago • 5.2 ETH</Text>
                     </div>
 
-                    <div className="p-2.5 border-l-2 rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--green-9)' }}>
+                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                       <Flex justify="between" align="center" className="mb-1">
                         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD LONG</Text>
                         <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+$892</Text>
@@ -718,7 +811,7 @@ export default function Home() {
               }}
               className="w-8 h-8 rounded flex items-center justify-center transition-colors"
               style={{
-                background: activeTradingTab === "trade" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)',
+                background: 'transparent',
                 color: 'var(--slate-11)'
               }}
               onMouseEnter={(e) => {
@@ -726,7 +819,7 @@ export default function Home() {
                 e.currentTarget.style.color = 'var(--slate-12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = activeTradingTab === "trade" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)';
+                e.currentTarget.style.background = 'transparent';
                 e.currentTarget.style.color = 'var(--slate-11)';
               }}
               title="Trading"
@@ -742,7 +835,7 @@ export default function Home() {
               }}
               className="w-8 h-8 rounded flex items-center justify-center transition-colors"
               style={{
-                background: activeTradingTab === "portfolio" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)',
+                background: 'transparent',
                 color: 'var(--slate-11)'
               }}
               onMouseEnter={(e) => {
@@ -750,12 +843,36 @@ export default function Home() {
                 e.currentTarget.style.color = 'var(--slate-12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = activeTradingTab === "portfolio" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)';
+                e.currentTarget.style.background = 'transparent';
                 e.currentTarget.style.color = 'var(--slate-11)';
               }}
               title="Portfolio"
             >
               <DashboardIcon width="18" height="18" />
+            </button>
+
+            {/* Open Orders Icon */}
+            <button
+              onClick={() => {
+                setActiveTradingTab("orders");
+                setTradingPanelOpen(true);
+              }}
+              className="w-8 h-8 rounded flex items-center justify-center transition-colors"
+              style={{
+                background: 'transparent',
+                color: 'var(--slate-11)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--slate-4)';
+                e.currentTarget.style.color = 'var(--slate-12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'var(--slate-11)';
+              }}
+              title="Open Orders"
+            >
+              <ClipboardIcon width="18" height="18" />
             </button>
 
             {/* History Icon */}
@@ -766,7 +883,7 @@ export default function Home() {
               }}
               className="w-8 h-8 rounded flex items-center justify-center transition-colors"
               style={{
-                background: activeTradingTab === "history" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)',
+                background: 'transparent',
                 color: 'var(--slate-11)'
               }}
               onMouseEnter={(e) => {
@@ -774,13 +891,36 @@ export default function Home() {
                 e.currentTarget.style.color = 'var(--slate-12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = activeTradingTab === "history" && tradingPanelOpen ? 'var(--slate-4)' : 'var(--slate-3)';
+                e.currentTarget.style.background = 'transparent';
                 e.currentTarget.style.color = 'var(--slate-11)';
               }}
               title="History"
             >
               <ActivityLogIcon width="18" height="18" />
             </button>
+
+            {/* Settings Icon */}
+            <div className="mt-auto">
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="w-8 h-8 rounded flex items-center justify-center transition-colors"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--slate-11)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--slate-4)';
+                  e.currentTarget.style.color = 'var(--slate-12)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--slate-11)';
+                }}
+                title="Settings"
+              >
+                <GearIcon width="18" height="18" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -897,7 +1037,7 @@ export default function Home() {
                         onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                         className="flex-1 px-3 py-2 rounded-lg border outline-none transition-colors"
                         style={{
-                          background: 'var(--slate-3)',
+                          background: 'var(--slate-4)',
                           borderColor: 'var(--slate-7)',
                           color: 'var(--slate-12)'
                         }}
@@ -909,6 +1049,193 @@ export default function Home() {
                         style={{ background: 'var(--red-9)', color: 'white', cursor: 'pointer' }}
                       >
                         Send
+                      </Button>
+                    </Flex>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50"
+              style={{ background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
+              onClick={() => setSettingsOpen(false)}
+            />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-8"
+              onClick={() => setSettingsOpen(false)}
+            >
+              <div
+                className="relative w-full max-w-3xl max-h-[80vh] overflow-hidden rounded-lg shadow-2xl border"
+                style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="h-full flex flex-col">
+                  {/* Header */}
+                  <div className="p-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+                    <Flex justify="between" align="center">
+                      <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>
+                        Settings
+                      </Text>
+                      <button
+                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+                        style={{ color: 'var(--slate-11)' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--slate-4)';
+                          e.currentTarget.style.color = 'var(--slate-12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = 'var(--slate-11)';
+                        }}
+                        onClick={() => setSettingsOpen(false)}
+                      >
+                        <Text size="4">✕</Text>
+                      </button>
+                    </Flex>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+                    <div className="space-y-6">
+                      {/* AI Agent Configuration */}
+                      <div>
+                        <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                          AI Agent Configuration
+                        </Text>
+                        <div className="space-y-4">
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Flex justify="between" align="center" className="mb-2">
+                              <div>
+                                <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Enable Voice Alerts</Text>
+                                <Text size="1" style={{ color: 'var(--slate-11)' }}>Agent will speak when anomalies are detected</Text>
+                              </div>
+                              <input type="checkbox" defaultChecked className="w-5 h-5" />
+                            </Flex>
+                          </div>
+
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Flex justify="between" align="center" className="mb-2">
+                              <div>
+                                <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Auto-Interrupt Trading</Text>
+                                <Text size="1" style={{ color: 'var(--slate-11)' }}>Block trades when risk level is critical</Text>
+                              </div>
+                              <input type="checkbox" className="w-5 h-5" />
+                            </Flex>
+                          </div>
+
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Text size="2" weight="medium" className="mb-2 block" style={{ color: 'var(--slate-12)' }}>Risk Threshold</Text>
+                            <Text size="1" className="mb-3 block" style={{ color: 'var(--slate-11)' }}>Alert when risk level exceeds</Text>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              defaultValue="70"
+                              className="w-full"
+                              style={{ accentColor: 'var(--red-9)' }}
+                            />
+                            <Flex justify="between" className="mt-2">
+                              <Text size="1" style={{ color: 'var(--slate-11)' }}>Low</Text>
+                              <Text size="1" style={{ color: 'var(--slate-11)' }}>High</Text>
+                            </Flex>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Trading Preferences */}
+                      <div>
+                        <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                          Trading Preferences
+                        </Text>
+                        <div className="space-y-4">
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Flex justify="between" align="center" className="mb-2">
+                              <div>
+                                <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Confirm Before Execute</Text>
+                                <Text size="1" style={{ color: 'var(--slate-11)' }}>Require confirmation for all trades</Text>
+                              </div>
+                              <input type="checkbox" defaultChecked className="w-5 h-5" />
+                            </Flex>
+                          </div>
+
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Text size="2" weight="medium" className="mb-2 block" style={{ color: 'var(--slate-12)' }}>Default Position Size</Text>
+                            <input
+                              type="text"
+                              defaultValue="0.5"
+                              className="w-full px-3 py-2 rounded border font-mono"
+                              style={{
+                                background: 'var(--slate-4)',
+                                borderColor: 'var(--slate-7)',
+                                color: 'var(--slate-12)'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Data Sources */}
+                      <div>
+                        <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                          Data Sources
+                        </Text>
+                        <div className="space-y-4">
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Flex justify="between" align="center">
+                              <div>
+                                <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Polymarket Integration</Text>
+                                <Text size="1" style={{ color: 'var(--green-11)' }}>Connected</Text>
+                              </div>
+                              <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
+                            </Flex>
+                          </div>
+
+                          <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                            <Flex justify="between" align="center">
+                              <div>
+                                <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Reddit Sentiment</Text>
+                                <Text size="1" style={{ color: 'var(--green-11)' }}>Connected</Text>
+                              </div>
+                              <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
+                            </Flex>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-4 border-t" style={{ borderColor: 'var(--slate-6)' }}>
+                    <Flex justify="end" gap="3">
+                      <Button
+                        onClick={() => setSettingsOpen(false)}
+                        style={{ background: 'var(--slate-4)', color: 'var(--slate-12)', cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => setSettingsOpen(false)}
+                        style={{ background: 'var(--blue-9)', color: 'white', cursor: 'pointer' }}
+                      >
+                        Save Changes
                       </Button>
                     </Flex>
                   </div>
