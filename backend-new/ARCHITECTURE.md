@@ -777,7 +777,8 @@ SYSTEM_ALERT: risk_score=92. Bitcoin down 5% in 10 minutes. Polymarket odds coll
 **What it does**:
 
 1. **Fetch External Data** (parallel async calls):
-   - CoinGecko API: BTC price, 24h change, volume
+   - Alpaca Service: Read current BTC price from in-memory cache (live websocket data)
+     - NOTE: `app/services/coingecko.py` exists but is NOT used - Alpaca provides all price data
    - Polymarket Gamma API: Top 4-5 BTC-related prediction markets
    - Reddit JSON: r/wallstreetbets, r/Polymarket, r/PredictionMarket, r/pennystocks (10 posts each)
 
@@ -911,8 +912,9 @@ OPENAI_API_KEY=sk-xxx
 ELEVENLABS_API_KEY=xxx
 ELEVENLABS_VOICE_ID=xxx  # Your chosen anime voice
 
-# CoinGecko (optional, free tier works)
-COINGECKO_API_KEY=xxx  # Optional for higher rate limits
+# Alpaca (for live market data and trading)
+ALPACA_API_KEY=xxx
+ALPACA_SECRET_KEY=xxx
 
 # Polymarket (no key needed for public API)
 
@@ -932,14 +934,17 @@ ENABLE_CRASH_BUTTON=true
 ## 🛡️ Error Handling Strategy
 
 ### API Failures
-
+**Alpaca/Polymarket/Reddit Down**:
 **CoinGecko/Polymarket/Reddit Down**:
 ```python
-try:
+    # Read from Alpaca's in-memory price cache
+    price = alpaca_service.get_price("BTCUSD")
+    if not price:
+        raise Exception("No price data available")
     data = await fetch_coingecko()
-except Exception as e:
-    logger.error(f"CoinGecko failed: {e}")
-    # Fallback to last known data
+    logger.error(f"Alpaca price unavailable: {e}")
+    # Fallback to last known data from database
+    data = get_last_market_context_from_db()
     data = get_last_cached_price()
 ```
 
@@ -1130,7 +1135,7 @@ except Exception as e:
 
 ```mermaid
 graph TB
-    subgraph "External APIs"
+        CG[CoinGecko API<br/>BTC Price]
         CG[CoinGecko API<br/>BTC Price]
         PM[Polymarket API<br/>Prediction Markets]
         RD[Reddit JSON<br/>Social Sentiment]
@@ -1179,7 +1184,7 @@ graph TB
     end
 
     %% Data Ingest Flow
-    DI -->|Fetch| CG
+    DI -->|Read Prices| ALP
     DI -->|Fetch| PM
     DI -->|Fetch| RD
     DI -->|Process| LLM1
@@ -1256,7 +1261,7 @@ graph TB
     classDef frontend fill:#1dd1a1,stroke:#10ac84,color:#fff
     classDef tool fill:#fd79a8,stroke:#e84393,color:#fff
     
-    class CG,PM,RD external
+    class ALP,PM,RD external
     class DI,TM worker
     class LLM1,LLM2,EL_STT,EL_TTS ai
     class DB_MC,DB_FI,DB_P,DB_T db
