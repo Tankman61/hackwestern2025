@@ -47,21 +47,21 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Configure properly in production
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Import routers
+from app.api import portfolio, orders, market_data
+# from app.api import websocket  # TODO: Implement WebSocket
+
 # Register routers
-app.include_router(market_ws_router, tags=["market-data"])
-app.include_router(trading_router, tags=["trading"])
-
-# Import other routers as needed
-# from app.api import portfolio, orders, market_data, websocket
-# app.include_router(portfolio.router, prefix="/api", tags=["portfolio"])
-# app.include_router(orders.router, prefix="/api", tags=["orders"])
-
+app.include_router(portfolio.router, prefix="/api", tags=["portfolio"])
+app.include_router(orders.router, prefix="/api", tags=["orders"])
+app.include_router(market_data.router, prefix="/api", tags=["market"])
+# app.include_router(websocket.router, prefix="/ws", tags=["websocket"])  # TODO: Implement WebSocket
 
 @app.get("/")
 async def root():

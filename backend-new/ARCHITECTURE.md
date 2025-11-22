@@ -19,12 +19,13 @@ Perfect. Let me regenerate the complete architecture with:
 **Loop 1: Data Ingest** (Background Worker)
 - **Runs**: Every 10 seconds
 - **Does**: Fetches external APIs → Processes with cheap LLM → Writes to database
-- **Output**: Populates `market_context` and `feed_items` tables
+- **Output**: Populates `market_context` (sentiment, price, polymarket stats) and `feed_items` tables
+- **Does NOT calculate risk_score** - leaves it at 0
 
 **Loop 2: Trigger Monitor** (Background Worker)
 - **Runs**: Every 1 second
-- **Does**: Reads latest `market_context` → Calculates risk_score → Decides if agent should interrupt
-- **Output**: Sends WebSocket alerts when risk_score > 80
+- **Does**: Reads latest `market_context` → **Calculates risk_score** using weighted formula → Updates `market_context` → Decides if agent should interrupt
+- **Output**: Updates `risk_score` in database, sends WebSocket alerts when risk_score > 80
 
 **Loop 3: Agent Runtime** (WebSocket-driven)
 - **Runs**: On-demand (when user speaks OR when triggered)
@@ -92,22 +93,26 @@ PENDING_APPROVAL  (Agent called execute_trade, waiting for user)
 **Purpose**: Time-series storage of processed market analysis
 
 **What it stores**:
-- `risk_score` - 0-100 (calculated by Trigger Monitor)
+- `risk_score` - 0-100 (calculated by Trigger Monitor using weighted formula)
 - `summary` - Human-readable text ("Bitcoin dumping, Reddit panicking")
 - `btc_price` - Current spot price
 - `price_change_24h` - Percentage change
+- `sentiment_bullish`, `sentiment_bearish`, `sentiment_score` - Reddit post counts
 - `hype_score` - 0-100 (from keyword analysis)
 - `sentiment` - "BULLISH", "BEARISH", "PANIC"
-- `polymarket_odds` - Average probability across all tracked markets
+- `polymarket_avg_odds` - Average probability across all tracked markets
 - `created_at` - Timestamp (new row every 10s)
 
 **Who writes to it**:
-- Data Ingest Worker - Inserts new row every 10 seconds
+- **Data Ingest Worker (10s)** - Inserts new row with ALL fields EXCEPT `risk_score` (leaves it at 0)
+  - Writes: sentiment stats, price data, polymarket odds, summary
+- **Trigger Monitor (1s)** - Updates `risk_score` on latest row using weighted formula:
+  - `risk_score = (sentiment_score * 0.3) + (technical * 0.3) + (polymarket_divergence * 0.4)`
 
 **Who reads from it**:
-- Trigger Monitor - Reads latest row every 1 second
+- Trigger Monitor - Reads latest row every 1 second to calculate risk_score
 - `get_market_sentiment()` tool - Agent reads latest state
-- `GET /api/vibes` - Frontend displays current risk_score
+- `GET /api/risk-monitor` - Frontend displays current risk_score and all market data
 
 ---
 
@@ -823,9 +828,10 @@ SYSTEM_ALERT: risk_score=92. Bitcoin down 5% in 10 minutes. Polymarket odds coll
 ```
 
 3. **Write to Database**:
-   - Insert into `market_context`: risk_score, summary, all metrics
-   - Upsert into `feed_items` (source='POLYMARKET'): Market names, odds, volumes
-   - Upsert into `feed_items` (source='REDDIT'): Post text, username, subreddit, sentiment
+   - Insert into `market_context`: summary, sentiment stats, price data, polymarket odds (risk_score=0)
+   - Upsert into `feed_items` (source='POLYMARKET'): Market names, odds, volumes, URLs
+   - Upsert into `feed_items` (source='REDDIT'): Post text, username, subreddit, sentiment, URLs
+   - Upsert into `watchlist`: ETH, SOL, AVAX, MATIC prices
 
 4. **Sleep 10 seconds** and repeat
 
@@ -842,14 +848,23 @@ SYSTEM_ALERT: risk_score=92. Bitcoin down 5% in 10 minutes. Polymarket odds coll
 1. **Read Latest Context**:
    - Query `market_context` ORDER BY created_at DESC LIMIT 1
 
-2. **Calculate risk_score** (heuristic formula):
+2. **Calculate risk_score** (weighted formula):
 ```python
-risk_score = (
-  abs(price_change_24h) * 10 +        # Volatility weight
-  hype_score * 0.6 +                  # Social sentiment
-  abs(polymarket_odds - 0.5) * 40     # Prediction confidence
-)
+# Read latest market_context
+context = get_latest_market_context()
+
+# Calculate weighted risk_score
+sentiment_component = context['sentiment_score'] * 0.3       # 30% weight
+technical_component = abs(context['price_change_24h']) * 0.3 # 30% weight
+polymarket_component = abs(context['polymarket_avg_odds'] - 0.5) * 0.4  # 40% weight
+
+risk_score = sentiment_component + technical_component + polymarket_component
+
 # Clamp to 0-100
+risk_score = max(0, min(100, int(risk_score)))
+
+# UPDATE the market_context row with calculated risk_score
+update_market_context_risk_score(context['id'], risk_score)
 ```
 
 3. **Decision Logic**:
