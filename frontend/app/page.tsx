@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, Flex, Heading, Text, Button, Badge, Box, TextField, ScrollArea, TextArea, DropdownMenu } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ClipboardIcon, ChevronDownIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ChevronDownIcon } from "@radix-ui/react-icons";
 
 const subredditOptions = [
   "All",
@@ -131,7 +131,7 @@ export default function Home() {
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true); // Always open by default
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "orders" | "history">("trade");
+  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
   const [riskLevel] = useState<"low" | "medium" | "high">("high"); // Demo: high risk
   const [currentPrice] = useState("98,742.31");
   const [currentTime, setCurrentTime] = useState("");
@@ -167,6 +167,38 @@ export default function Home() {
     { question: "BTC to hit $120k in 2025", probability: 42, change: "+8%", volume: "1.8M" },
     { question: "Bitcoin ETF approval", probability: 89, change: "-2%", volume: "5.1M" },
     { question: "BTC above $90k EOY", probability: 76, change: "+5%", volume: "3.2M" },
+  ];
+  const openOrders = [
+    {
+      market: "BTC/USD",
+      badge: "LIMIT BUY",
+      badgeColor: { bg: 'var(--green-4)', text: 'var(--green-11)' },
+      rows: [
+        { label: "Size", value: "0.3 BTC" },
+        { label: "Limit Price", value: "$97,500" },
+      ],
+      placed: "30 min ago",
+    },
+    {
+      market: "ETH/USD",
+      badge: "STOP-LOSS",
+      badgeColor: { bg: 'var(--red-4)', text: 'var(--red-10)' },
+      rows: [
+        { label: "Size", value: "1.5 ETH" },
+        { label: "Stop Price", value: "$3,750" },
+      ],
+      placed: "2 hours ago",
+    },
+    {
+      market: "BTC/USD",
+      badge: "LIMIT SELL",
+      badgeColor: { bg: 'var(--red-4)', text: 'var(--red-10)' },
+      rows: [
+        { label: "Size", value: "0.2 BTC" },
+        { label: "Limit Price", value: "$100,000" },
+      ],
+      placed: "1 day ago",
+    },
   ];
   const activeSubreddit = subredditData[selectedSubreddit];
   const fallbackSentiment = subredditData["All"].stats;
@@ -409,7 +441,10 @@ export default function Home() {
                   </Flex>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin mt-2" style={{ maxHeight: '200px' }}>
+                <div
+                  className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin"
+                  style={{ maxHeight: '200px', marginTop: sentimentExpanded ? 0 : '0.5rem' }}
+                >
                   {redditPosts.map((post, idx) => (
                     <a
                       key={idx}
@@ -733,7 +768,7 @@ export default function Home() {
                     </Text>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                  <div className="flex-1 overflow-y-auto p-3 pb-16 scrollbar-thin">
                   {/* Portfolio Summary */}
                   <div className="mb-4 p-4 rounded border" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                     <Text size="1" className="mb-4 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
@@ -757,132 +792,90 @@ export default function Home() {
                     Open Positions
                   </Text>
                   <div className="space-y-3">
-                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
-                      <Flex justify="between" align="center" className="mb-1">
-                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
-                        <Badge size="1" style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>LONG</Badge>
-                      </Flex>
-                      <Flex justify="between" className="mb-0.5">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>0.5 BTC</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-0.5">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Entry</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$96,250</Text>
-                      </Flex>
-                      <Flex justify="between">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>P&L</Text>
-                        <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+$1,246.15</Text>
-                      </Flex>
-                    </div>
-
-                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
-                      <Flex justify="between" align="center" className="mb-1">
-                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>ETH/USD</Text>
-                        <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>SHORT</Badge>
-                      </Flex>
-                      <Flex justify="between" className="mb-0.5">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>2.0 ETH</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-0.5">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Entry</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$3,842</Text>
-                      </Flex>
-                      <Flex justify="between">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>P&L</Text>
-                        <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--red-10)' }}>-$184.50</Text>
-                      </Flex>
-                    </div>
+                    {[
+                      {
+                        market: "BTC/USD",
+                        direction: "LONG",
+                        badgeColor: { bg: 'var(--green-4)', text: 'var(--green-11)' },
+                        fields: [
+                          { label: "Size", value: "0.5 BTC" },
+                          { label: "Entry", value: "$96,250" },
+                          { label: "P&L", value: "+$1,246.15", color: 'var(--green-11)' },
+                        ],
+                      },
+                      {
+                        market: "ETH/USD",
+                        direction: "SHORT",
+                        badgeColor: { bg: 'var(--red-4)', text: 'var(--red-10)' },
+                        fields: [
+                          { label: "Size", value: "2.0 ETH" },
+                          { label: "Entry", value: "$3,842" },
+                          { label: "P&L", value: "-$184.50", color: 'var(--red-10)' },
+                        ],
+                      },
+                    ].map((position) => (
+                      <div key={position.market} className="p-3 border rounded space-y-2" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                        <Flex justify="between" align="center">
+                          <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{position.market}</Text>
+                          <Badge size="1" style={{ background: position.badgeColor.bg, color: position.badgeColor.text }}>{position.direction}</Badge>
+                        </Flex>
+                        {position.fields.map((field) => (
+                          <Flex key={field.label} justify="between" align="center">
+                            <Text size="1" style={{ color: 'var(--slate-11)' }}>{field.label}</Text>
+                            <Text size="1" className="font-mono" style={{ color: field.color || 'var(--slate-12)' }}>
+                              {field.value}
+                            </Text>
+                          </Flex>
+                        ))}
+                        <Flex gap="2">
+                          <Button
+                            size="1"
+                            className="flex-1 cursor-pointer"
+                            style={{ background: 'var(--slate-5)', color: 'var(--slate-12)' }}
+                          >
+                            Adjust Size
+                          </Button>
+                          <Button
+                            size="1"
+                            className="flex-1 cursor-pointer"
+                            style={{ background: 'var(--red-9)', color: 'white' }}
+                          >
+                            Close Position
+                          </Button>
+                        </Flex>
+                      </div>
+                    ))}
                   </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Open Orders Tab */}
-              {activeTradingTab === "orders" && (
-                <div className="flex flex-col h-full">
-                  {/* Header */}
-                  <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-                    <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>
-                      Open Orders
-                    </Text>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                  <Text size="1" className="mt-6 mb-3 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+                    Open Orders
+                  </Text>
                   <div className="space-y-3">
-                    {/* Limit Order 1 */}
-                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
-                      <Flex justify="between" align="center" className="mb-2">
-                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
-                        <Badge size="1" style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>LIMIT BUY</Badge>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>0.3 BTC</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Limit Price</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$97,500</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-2">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>30 min ago</Text>
-                      </Flex>
-                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
-                        Cancel Order
-                      </Button>
-                    </div>
-
-                    {/* Stop-Loss Order */}
-                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
-                      <Flex justify="between" align="center" className="mb-2">
-                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>ETH/USD</Text>
-                        <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>STOP-LOSS</Badge>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>1.5 ETH</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Stop Price</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$3,750</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-2">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>2 hours ago</Text>
-                      </Flex>
-                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
-                        Cancel Order
-                      </Button>
-                    </div>
-
-                    {/* Limit Sell Order */}
-                    <div className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
-                      <Flex justify="between" align="center" className="mb-2">
-                        <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>BTC/USD</Text>
-                        <Badge size="1" style={{ background: 'var(--red-4)', color: 'var(--red-10)' }}>LIMIT SELL</Badge>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Size</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>0.2 BTC</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-1">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Limit Price</Text>
-                        <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>$100,000</Text>
-                      </Flex>
-                      <Flex justify="between" className="mb-2">
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
-                        <Text size="1" style={{ color: 'var(--slate-11)' }}>1 day ago</Text>
-                      </Flex>
-                      <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
-                        Cancel Order
-                      </Button>
-                    </div>
+                    {openOrders.map((order, idx) => (
+                      <div key={idx} className="p-3 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
+                        <Flex justify="between" align="center" className="mb-2">
+                          <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{order.market}</Text>
+                          <Badge size="1" style={{ background: order.badgeColor.bg, color: order.badgeColor.text }}>{order.badge}</Badge>
+                        </Flex>
+                        {order.rows.map((row) => (
+                          <Flex key={row.label} justify="between" className="mb-1">
+                            <Text size="1" style={{ color: 'var(--slate-11)' }}>{row.label}</Text>
+                            <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>{row.value}</Text>
+                          </Flex>
+                        ))}
+                        <Flex justify="between" className="mb-2">
+                          <Text size="1" style={{ color: 'var(--slate-11)' }}>Placed</Text>
+                          <Text size="1" style={{ color: 'var(--slate-11)' }}>{order.placed}</Text>
+                        </Flex>
+                        <Button size="1" className="w-full cursor-pointer" style={{ background: 'var(--red-9)', color: 'white' }}>
+                          Cancel Order
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                   </div>
                 </div>
               )}
+
 
               {/* History Tab */}
               {activeTradingTab === "history" && (
@@ -1032,30 +1025,6 @@ export default function Home() {
               title="Portfolio"
             >
               <DashboardIcon width="18" height="18" />
-            </button>
-
-            {/* Open Orders Icon */}
-            <button
-              onClick={() => {
-                setActiveTradingTab("orders");
-                setTradingPanelOpen(true);
-              }}
-              className="w-8 h-8 rounded flex items-center justify-center transition-colors"
-              style={{
-                background: 'transparent',
-                color: 'var(--slate-11)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--slate-4)';
-                e.currentTarget.style.color = 'var(--slate-12)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'var(--slate-11)';
-              }}
-              title="Open Orders"
-            >
-              <ClipboardIcon width="18" height="18" />
             </button>
 
             {/* History Icon */}
