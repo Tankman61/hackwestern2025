@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List
 
-from app.services.coingecko import get_coingecko_client
+from app.services.alpaca import get_btc_data
 from app.services.polymarket import get_polymarket_client
 from app.services.reddit import get_reddit_client
 from app.services.openai_client import get_openai_client
@@ -32,7 +32,6 @@ class DataIngestWorker:
     """
     
     def __init__(self):
-        self.coingecko = get_coingecko_client()
         self.polymarket = get_polymarket_client()
         self.reddit = get_reddit_client()
         self.openai = get_openai_client()
@@ -68,7 +67,7 @@ class DataIngestWorker:
         
         # STEP 1: Fetch all external data in parallel
         btc_data, polymarket_markets, reddit_posts = await asyncio.gather(
-            self.coingecko.fetch_btc_data(),
+            get_btc_data(),
             self.polymarket.fetch_btc_markets(),
             self.reddit.fetch_posts(limit_per_sub=10),
             return_exceptions=True
@@ -76,7 +75,7 @@ class DataIngestWorker:
         
         # Handle exceptions
         if isinstance(btc_data, Exception):
-            logger.error(f"CoinGecko fetch failed: {btc_data}")
+            logger.error(f"Alpaca fetch failed: {btc_data}")
             btc_data = {
                 "btc_price": 96500.00,
                 "price_change_24h": 0.0,
@@ -160,7 +159,11 @@ class DataIngestWorker:
                     "subreddit": post["subreddit"],
                     "sentiment": post["sentiment"],
                     "posted_ago": post["posted_ago"],
-                    "url": post["url"]
+                    "url": post["url"],
+                    "score": post.get("score", 0),
+                    "upvote_ratio": post.get("upvote_ratio", 0.5),
+                    "num_comments": post.get("num_comments", 0),
+                    "top_comments": post.get("top_comments", [])[:3]  # Store top 3 comments
                 },
                 "created_at": datetime.utcnow().isoformat()
             }
@@ -171,21 +174,9 @@ class DataIngestWorker:
             await self.db.upsert_feed_items(reddit_feed_items)
             logger.info(f"✅ Upserted {len(reddit_feed_items)} Reddit feed items")
         
-        # STEP 7: Update watchlist
-        watchlist_tickers = ["ETH-USD", "SOL-USD", "AVAX-USD", "MATIC-USD"]
-        watchlist_data = await self.coingecko.fetch_watchlist_prices(watchlist_tickers)
-        
-        for ticker, data in watchlist_data.items():
-            try:
-                # Upsert watchlist entry
-                self.db.client.table("watchlist").upsert({
-                    "ticker": ticker,
-                    "current_price": data["current_price"],
-                    "price_change_24h": data["price_change_24h"],
-                    "updated_at": datetime.utcnow().isoformat()
-                }).execute()
-            except Exception as e:
-                logger.error(f"Failed to update watchlist for {ticker}: {e}")
+        # STEP 7: Update watchlist (TODO: Use Alpaca for altcoin prices)
+        # For MVP, skipping watchlist updates since Alpaca requires separate subscription
+        # watchlist_tickers = ["ETH-USD", "SOL-USD", "AVAX-USD", "MATIC-USD"]
         
         logger.info(f"✅ Ingest cycle complete. Next cycle in {self.interval_seconds}s")
 

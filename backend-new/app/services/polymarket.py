@@ -4,7 +4,7 @@ Fetches prediction market data
 """
 import logging
 from typing import List, Dict, Any
-import aiohttp
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,13 @@ class PolymarketClient:
                 "closed": "false"
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get(search_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status != 200:
-                        logger.warning(f"Polymarket API returned status {response.status}")
-                        return self._get_mock_markets()
-                    
-                    data = await response.json()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(search_url, params=params)
+                if response.status_code != 200:
+                    logger.warning(f"Polymarket API returned status {response.status_code}")
+                    return self._get_mock_markets()
+                
+                data = response.json()
             
             markets = []
             btc_keywords = ["bitcoin", "btc", "crypto"]

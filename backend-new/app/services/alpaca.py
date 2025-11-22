@@ -637,3 +637,41 @@ class AlpacaMarketDataService:
 
 # Global service instance
 alpaca_service = AlpacaMarketDataService()
+
+
+async def get_btc_data() -> Dict[str, any]:
+    """
+    Get current BTC price data for the data ingest worker.
+    
+    Returns:
+        {
+            "btc_price": float,
+            "price_change_24h": float (percentage),
+            "volume_24h": str (formatted),
+            "price_high_24h": float,
+            "price_low_24h": float
+        }
+    """
+    # Get current price from in-memory cache
+    btc_price = alpaca_service.get_price("BTCUSD")
+    
+    if not btc_price:
+        # Fallback if not streaming yet
+        logger.warning("BTC price not available from stream, using fallback")
+        return {
+            "btc_price": 96500.00,
+            "price_change_24h": 0.0,
+            "volume_24h": "$0",
+            "price_high_24h": 96500.00,
+            "price_low_24h": 96500.00
+        }
+    
+    # TODO: Calculate 24h change, high, low from historical data
+    # For MVP, using live price with estimated values
+    return {
+        "btc_price": round(btc_price, 2),
+        "price_change_24h": 0.0,  # TODO: Track price changes
+        "volume_24h": "$0",  # TODO: Calculate from bar data
+        "price_high_24h": round(btc_price, 2),
+        "price_low_24h": round(btc_price, 2)
+    }

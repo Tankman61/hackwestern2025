@@ -56,25 +56,34 @@ BTC Price: ${btc_price:,.2f}
 Polymarket Markets:
 {json.dumps(polymarket_markets, indent=2)}
 
-Reddit Posts (sample):
+Reddit Posts with Comments (sample of {len(reddit_posts[:10])} posts):
 {json.dumps(reddit_posts[:10], indent=2)}
+
+CRITICAL: Each post includes "top_comments" with comment text, score, and upvote_ratio.
+- High upvote_ratio (>0.7) + positive score = strong community agreement
+- Low upvote_ratio (<0.3) + negative score = strong disagreement/bearish
+- Comments with high scores carry more weight in sentiment analysis
 
 Analyze the data and return ONLY a JSON object with this structure:
 {{
   "hype_score": <0-100, how hyped is the market>,
   "sentiment": "<BULLISH|BEARISH|PANIC>",
-  "keywords": ["<top", "keywords", "from", "posts>"],
+  "keywords": ["<top", "keywords", "from", "posts", "and", "comments>"],
   "polymarket_summary": "<one sentence about prediction market odds>",
-  "summary": "<2-3 sentence market summary>",
-  "sentiment_bullish": <count of bullish posts>,
-  "sentiment_bearish": <count of bearish/panic posts>
+  "summary": "<2-3 sentence market summary INCLUDING insights from highly-upvoted comments>",
+  "sentiment_bullish": <count of bullish posts AND highly-upvoted bullish comments>,
+  "sentiment_bearish": <count of bearish/panic posts AND highly-upvoted bearish comments>
 }}
 
-Consider:
-- Price movement direction and magnitude
-- Polymarket odds (high odds = bullish, low/collapsing = bearish)
-- Reddit sentiment (keywords like "moon", "YOLO" = bullish, "dump", "rekt" = bearish)
-- PANIC sentiment if price dropping >3% AND negative Reddit + collapsing odds"""
+Analysis Guidelines:
+1. Price movement direction and magnitude
+2. Polymarket odds (high odds = bullish, low/collapsing = bearish)
+3. Reddit POST sentiment (keywords like "moon", "YOLO" = bullish, "dump", "rekt" = bearish)
+4. **Reddit COMMENT sentiment weighted by upvote_ratio and score**:
+   - Comments with score > 10 and upvote_ratio > 0.7 = strong community sentiment
+   - Comments with score < -5 = bearish/controversial
+   - Ignore low-engagement comments (score < 3)
+5. PANIC sentiment if: price dropping >3% AND negative Reddit + collapsing odds + highly-upvoted panic comments"""
 
             response = await self.client.chat.completions.create(
                 model=self.cheap_model,
@@ -131,6 +140,7 @@ Consider:
         bearish_count = 0
         
         for post in reddit_posts:
+            # Analyze post title
             title = post.get("title", "").lower()
             for word in bullish_keywords:
                 if word in title:
@@ -140,6 +150,28 @@ Consider:
                 if word in title:
                     bearish_count += 1
                     break
+            
+            # Analyze comments (weighted by upvote ratio)
+            comments = post.get("top_comments", [])
+            for comment in comments:
+                body = comment.get("body", "").lower()
+                score = comment.get("score", 0)
+                upvote_ratio = comment.get("upvote_ratio", 0.5)
+                
+                # Only consider comments with engagement
+                if score < 3:
+                    continue
+                
+                # Weight by upvote ratio (high ratio = strong agreement)
+                weight = 1 if upvote_ratio > 0.7 else 0.5
+                
+                is_bullish = any(word in body for word in bullish_keywords)
+                is_bearish = any(word in body for word in bearish_keywords)
+                
+                if is_bullish:
+                    bullish_count += weight
+                elif is_bearish:
+                    bearish_count += weight
         
         # Determine sentiment
         if price_change_24h < -3:
@@ -157,9 +189,9 @@ Consider:
             "sentiment": sentiment,
             "keywords": bullish_keywords[:3] if sentiment == "BULLISH" else bearish_keywords[:3],
             "polymarket_summary": "Polymarket data unavailable",
-            "summary": f"Bitcoin at ${btc_price:,.2f}, {price_change_24h:+.2f}% (24h). Using fallback analysis.",
-            "sentiment_bullish": bullish_count,
-            "sentiment_bearish": bearish_count
+            "summary": f"Bitcoin at ${btc_price:,.2f}, {price_change_24h:+.2f}% (24h). Using fallback analysis with comment sentiment.",
+            "sentiment_bullish": int(bullish_count),
+            "sentiment_bearish": int(bearish_count)
         }
     
     async def generate_alert_message(self, market_context: Dict[str, Any]) -> str:

@@ -76,11 +76,7 @@ class TriggerMonitorWorker:
         
         # STEP 3: Update market_context with calculated risk_score
         try:
-            self.db.client.table("market_context")\
-                .update({"risk_score": risk_score})\
-                .eq("id", context["id"])\
-                .execute()
-            
+            await self.db.update_market_context_risk_score(context["id"], risk_score)
             logger.debug(f"Updated risk_score: {risk_score}/100")
         except Exception as e:
             logger.error(f"Failed to update risk_score: {e}")

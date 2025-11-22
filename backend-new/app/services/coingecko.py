@@ -5,7 +5,7 @@ Fetches BTC price, 24h change, volume
 import os
 import logging
 from typing import Dict, Any, Optional
-import aiohttp
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +47,12 @@ class CoinGeckoClient:
             if self.api_key:
                 headers["x-cg-pro-api-key"] = self.api_key
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status != 200:
-                        raise Exception(f"CoinGecko API returned status {response.status}")
-                    
-                    data = await response.json()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params, headers=headers)
+                if response.status_code != 200:
+                    raise Exception(f"CoinGecko API returned status {response.status_code}")
+                
+                data = response.json()
             
             # Also fetch additional market data
             market_url = f"{self.base_url}/coins/bitcoin/market_chart"
@@ -62,9 +62,9 @@ class CoinGeckoClient:
                 "interval": "hourly"
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get(market_url, params=market_params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    market_data = await response.json() if response.status == 200 else {}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(market_url, params=market_params, headers=headers)
+                market_data = response.json() if response.status_code == 200 else {}
             
             # Extract data
             btc_data = data.get("bitcoin", {})
@@ -151,12 +151,12 @@ class CoinGeckoClient:
             if self.api_key:
                 headers["x-cg-pro-api-key"] = self.api_key
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status != 200:
-                        raise Exception(f"CoinGecko API returned status {response.status}")
-                    
-                    data = await response.json()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params, headers=headers)
+                if response.status_code != 200:
+                    raise Exception(f"CoinGecko API returned status {response.status_code}")
+                
+                data = response.json()
             
             # Convert back to ticker format
             result = {}
