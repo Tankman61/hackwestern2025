@@ -59,7 +59,6 @@ export function useAlpacaWebSocket({
 
     if (symbols.length > 0) {
       // Subscribe immediately (the WebSocket manager will handle queuing if not connected)
-      // Also set up a delayed subscription in case the connection takes time
       wsRef.current.subscribe(symbols);
       
       const timer = setTimeout(() => {
@@ -70,7 +69,13 @@ export function useAlpacaWebSocket({
         }
       }, 500);
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        // Unsubscribe when symbols change or component unmounts
+        if (wsRef.current && symbols.length > 0) {
+          wsRef.current.unsubscribe(symbols);
+        }
+      };
     }
   }, [symbols, autoConnect]);
 

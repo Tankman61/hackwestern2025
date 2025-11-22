@@ -59,9 +59,22 @@ class AlpacaWebSocketManager {
       return;
     }
 
+    // Clean up any existing connection before creating a new one
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch (e) {
+        // Ignore errors when closing
+      }
+      this.ws = null;
+    }
+
     try {
+      const wsUrl = `${this.baseUrl}/ws/alpaca/${this.dataType}`;
+      console.log(`🔌 Attempting to connect to: ${wsUrl}`);
+      
       // Connect to FastAPI WebSocket endpoint
-      this.ws = new WebSocket(`${this.baseUrl}/ws/alpaca/${this.dataType}`);
+      this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         console.log(`✅ WebSocket connected to ${this.dataType} stream`);
@@ -92,18 +105,56 @@ class AlpacaWebSocketManager {
         }
       };
 
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      this.ws.onerror = (event: Event) => {
+        // WebSocket error events don't provide much detail, but we can check the readyState
+        const readyStateText = 
+          this.ws?.readyState === WebSocket.CONNECTING ? 'CONNECTING' :
+          this.ws?.readyState === WebSocket.OPEN ? 'OPEN' :
+          this.ws?.readyState === WebSocket.CLOSING ? 'CLOSING' :
+          this.ws?.readyState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+        
+        const errorDetails: any = {
+          readyState: this.ws?.readyState,
+          readyStateText,
+          url: `${this.baseUrl}/ws/alpaca/${this.dataType}`,
+          timestamp: new Date().toISOString()
+        };
+        
+        console.error('WebSocket error:', errorDetails);
+        console.error('Event details:', {
+          type: event.type,
+          target: event.target,
+          currentTarget: event.currentTarget
+        });
+        
+        // Provide more helpful error message
+        let errorMessage = 'WebSocket connection error';
+        if (this.ws?.readyState === WebSocket.CLOSED) {
+          errorMessage = 'WebSocket connection closed unexpectedly. Attempting to reconnect...';
+        } else if (!this.ws || this.ws.readyState === WebSocket.CLOSING) {
+          errorMessage = 'WebSocket is closing or not initialized';
+        }
+        
         this.notifyHandlers({
           type: 'error',
-          message: 'WebSocket connection error'
+          message: errorMessage
         });
       };
 
-      this.ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      this.ws.onclose = (event: CloseEvent) => {
+        console.log('WebSocket disconnected', {
+          code: event.code,
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean,
+          dataType: this.dataType
+        });
         this.ws = null;
-        this.attemptReconnect();
+        
+        // Only attempt reconnect if it wasn't a clean close (code 1000)
+        // or if it was an unexpected close
+        if (event.code !== 1000) {
+          this.attemptReconnect();
+        }
       };
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);

@@ -12,9 +12,10 @@ interface SideMenuProps {
   onToggle: () => void;
   onPortfolioSelect: (portfolio: PortfolioView) => void;
   onHoldingsSelect: (holdings: HoldingsView) => void;
+  onHomeSelect?: () => void;
 }
 
-export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldingsSelect }: SideMenuProps) {
+export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldingsSelect, onHomeSelect }: SideMenuProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const menuItems = [
@@ -79,6 +80,31 @@ export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldin
         }}
       >
         <div className="p-4 space-y-1">
+          {/* Home Button */}
+          {onHomeSelect && (
+            <button
+              onClick={() => {
+                onHomeSelect();
+                setExpandedSections(new Set());
+              }}
+              className="w-full flex items-center justify-between px-4 py-3 rounded transition-colors mb-2"
+              style={{
+                background: 'transparent',
+                color: 'var(--slate-12)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--slate-3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Text size="3" weight="medium">
+                Home
+              </Text>
+            </button>
+          )}
+          
           {menuItems.map((item) => (
             <div key={item.id}>
               {/* Menu Item Button */}

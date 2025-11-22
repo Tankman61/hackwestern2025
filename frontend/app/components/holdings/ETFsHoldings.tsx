@@ -16,7 +16,12 @@ interface Holding {
   avgPrice: string;
 }
 
-export default function ETFsHoldings() {
+interface ETFsHoldingsProps {
+  initialSelectedHolding?: Holding | null;
+  onReturn?: () => void;
+}
+
+export default function ETFsHoldings({ initialSelectedHolding = null, onReturn }: ETFsHoldingsProps = {}) {
   const [holdings, setHoldings] = useState<Holding[]>([
     { id: "1", symbol: "SPY", name: "SPDR S&P 500 ETF", quantity: "280", avgPrice: "464.00" },
     { id: "2", symbol: "VOO", name: "Vanguard S&P 500 ETF", quantity: "195", avgPrice: "499.00" },
@@ -25,7 +30,29 @@ export default function ETFsHoldings() {
     { id: "5", symbol: "IWM", name: "iShares Russell 2000", quantity: "55", avgPrice: "210.00" },
     { id: "6", symbol: "DIA", name: "SPDR Dow Jones Industrial", quantity: "25", avgPrice: "427.50" },
   ]);
-  const [selectedHolding, setSelectedHolding] = useState<Holding | null>(null);
+  const [selectedHolding, setSelectedHolding] = useState<Holding | null>(initialSelectedHolding);
+  
+  // Update selected holding when prop changes
+  useEffect(() => {
+    if (initialSelectedHolding) {
+      setSelectedHolding(initialSelectedHolding);
+    }
+  }, [initialSelectedHolding]);
+
+  // Listen for custom event to select a holding (from dashboard click)
+  useEffect(() => {
+    const handleSelectHolding = (event: CustomEvent<Holding>) => {
+      const holding = event.detail;
+      if (holding.type === 'etfs') {
+        setSelectedHolding(holding);
+      }
+    };
+
+    window.addEventListener('selectHolding', handleSelectHolding as EventListener);
+    return () => {
+      window.removeEventListener('selectHolding', handleSelectHolding as EventListener);
+    };
+  }, []);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -103,11 +130,12 @@ export default function ETFsHoldings() {
         horzLines: { color: '#2B2D31' },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: chartContainerRef.current.clientHeight || Math.max(400, window.innerHeight * 0.4),
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
       },
+      autoSize: true,
     });
 
     chartRef.current = chart;
@@ -151,15 +179,26 @@ export default function ETFsHoldings() {
     candlestickSeries.setData(generateData());
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chartContainerRef.current && chartRef.current) {
+        const width = chartContainerRef.current.clientWidth;
+        const height = chartContainerRef.current.clientHeight || Math.max(400, window.innerHeight * 0.4);
+        chartRef.current.applyOptions({ width, height });
       }
     };
 
     window.addEventListener('resize', handleResize);
+    
+    // Also listen for zoom changes
+    const resizeObserver = new ResizeObserver(handleResize);
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (resizeObserver && chartContainerRef.current) {
+        resizeObserver.unobserve(chartContainerRef.current);
+      }
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -176,10 +215,16 @@ export default function ETFsHoldings() {
           <Flex align="center" gap="3">
             <Button
               variant="soft"
-              onClick={() => setSelectedHolding(null)}
+              onClick={() => {
+                if (onReturn) {
+                  onReturn();
+                } else {
+                  setSelectedHolding(null);
+                }
+              }}
               style={{ cursor: 'pointer' }}
             >
-              <ArrowLeftIcon /> Back
+              <ArrowLeftIcon /> Return
             </Button>
             <div>
               <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
@@ -193,7 +238,7 @@ export default function ETFsHoldings() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 p-6 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 p-4 md:p-6 border-b" style={{ borderColor: 'var(--slate-6)', padding: 'clamp(1rem, 2vw, 1.5rem)', gap: 'clamp(0.5rem, 1vw, 1rem)' }}>
           <div>
             <Text size="2" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Shares</Text>
             <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedHolding.quantity}</Text>
@@ -222,7 +267,7 @@ export default function ETFsHoldings() {
         </div>
 
         {/* Chart */}
-        <div className="p-6">
+        <div className="p-4 md:p-6" style={{ padding: 'clamp(1rem, 2vw, 1.5rem)' }}>
           <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
             Live Price Chart {isConnected ? '(Connected to Alpaca)' : '(Connecting...)'}
           </Text>
@@ -242,7 +287,7 @@ export default function ETFsHoldings() {
       </div>
 
       {/* Add New Holding Form */}
-      <div className="p-6 border-b" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+      <div className="p-4 md:p-6 border-b" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', padding: 'clamp(1rem, 2vw, 1.5rem)' }}>
         <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
           Add New Holding
         </Text>
@@ -286,23 +331,26 @@ export default function ETFsHoldings() {
       </div>
 
       {/* Holdings List */}
-      <div className="p-6">
-        <div className="space-y-2">
+      <div className="p-4 md:p-6 flex flex-col" style={{ padding: 'clamp(1rem, 2vw, 1.5rem)', height: 'calc(100vh - 300px)' }}>
+        <div className="space-y-2 flex-shrink-0">
           {/* Header Row */}
-          <div className="grid grid-cols-[150px_2fr_150px_150px_80px] gap-4 px-4 pb-2 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+          <div className="grid grid-cols-[minmax(100px,150px)_2fr_minmax(100px,150px)_minmax(100px,150px)_minmax(60px,80px)] gap-2 md:gap-4 px-2 md:px-4 pb-2 border-b" style={{ borderColor: 'var(--slate-6)', gap: 'clamp(0.5rem, 1vw, 1rem)', paddingLeft: 'clamp(0.5rem, 1vw, 1rem)', paddingRight: 'clamp(0.5rem, 1vw, 1rem)' }}>
             <Text size="2" weight="bold" style={{ color: 'var(--slate-11)' }}>Symbol</Text>
             <Text size="2" weight="bold" style={{ color: 'var(--slate-11)' }}>Name</Text>
             <Text size="2" weight="bold" style={{ color: 'var(--slate-11)' }}>Quantity</Text>
             <Text size="2" weight="bold" style={{ color: 'var(--slate-11)' }}>Avg Price</Text>
             <Text size="2" weight="bold" style={{ color: 'var(--slate-11)' }}>Action</Text>
           </div>
-
-          {/* Holdings Rows */}
-          {holdings.map((holding) => (
+        </div>
+        
+        {/* Scrollable Holdings Rows */}
+        <div className="overflow-y-auto flex-1 mt-2">
+          <div className="space-y-2">
+            {holdings.map((holding) => (
             <div
               key={holding.id}
-              className="grid grid-cols-[150px_2fr_150px_150px_80px] gap-4 p-4 rounded cursor-pointer transition-colors"
-              style={{ background: 'var(--slate-3)' }}
+              className="grid grid-cols-[minmax(100px,150px)_2fr_minmax(100px,150px)_minmax(100px,150px)_minmax(60px,80px)] gap-2 md:gap-4 p-2 md:p-4 rounded cursor-pointer transition-colors"
+              style={{ background: 'var(--slate-3)', gap: 'clamp(0.5rem, 1vw, 1rem)', padding: 'clamp(0.5rem, 1vw, 1rem)' }}
               onClick={() => setSelectedHolding(holding)}
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--slate-4)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'var(--slate-3)'}
@@ -332,6 +380,7 @@ export default function ETFsHoldings() {
               </Button>
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

@@ -6,6 +6,8 @@ import { useAlpacaWebSocket } from "@/hooks/useAlpacaWebSocket";
 import type { AlpacaMessage, AlpacaBar } from "@/lib/websocket";
 import { transformBarToChartData } from "@/lib/alpacaDataTransform";
 
+type ChartType = "candlestick" | "bar" | "line" | "area" | "baseline" | "histogram";
+
 interface LiveChartProps {
   symbol: string;
   dataType: "crypto" | "stocks" | "options" | "etfs";
@@ -14,9 +16,10 @@ interface LiveChartProps {
 export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<any> | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
+  const [chartType, setChartType] = useState<ChartType>("candlestick");
   const hasInitialDataRef = useRef(false);
   const dataPointsRef = useRef<Array<{ time: number; open: number; high: number; low: number; close: number; volume?: number }>>([]);
 
@@ -67,7 +70,18 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
             // Update existing data point
             dataPointsRef.current[existingIndex] = chartData;
             try {
-              seriesRef.current.update(chartData);
+              // Update based on chart type
+              if (chartType === "candlestick" || chartType === "bar") {
+                seriesRef.current.update(chartData);
+              } else if (chartType === "histogram") {
+                seriesRef.current.update({
+                  time: chartData.time,
+                  value: chartData.volume || 0,
+                  color: chartData.close >= chartData.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                } as any);
+              } else {
+                seriesRef.current.update({ time: chartData.time, value: chartData.close } as any);
+              }
             } catch (error) {
               // If update fails (e.g., bar is too old), try to add as new data
               console.warn('Failed to update existing bar, trying to add as new:', error);
@@ -80,7 +94,18 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
                   if (dataPointsRef.current.length > 100) {
                     dataPointsRef.current.shift();
                   }
-                  seriesRef.current.update(chartData);
+                  // Re-render with updated data
+                  if (chartType === "candlestick" || chartType === "bar") {
+                    seriesRef.current.update(chartData);
+                  } else if (chartType === "histogram") {
+                    seriesRef.current.update({
+                      time: chartData.time,
+                      value: chartData.volume || 0,
+                      color: chartData.close >= chartData.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                    } as any);
+                  } else {
+                    seriesRef.current.update({ time: chartData.time, value: chartData.close } as any);
+                  }
                 }
               }
             }
@@ -89,7 +114,14 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
             if (!hasInitialDataRef.current) {
               // First data point - set initial data
               dataPointsRef.current = [chartData];
-              seriesRef.current.setData(dataPointsRef.current);
+              // Set data based on chart type
+              if (chartType === "candlestick" || chartType === "bar") {
+                seriesRef.current.setData(dataPointsRef.current as any);
+              } else if (chartType === "histogram") {
+                seriesRef.current.setData(convertToVolumeData(dataPointsRef.current) as any);
+              } else {
+                seriesRef.current.setData(convertToSimpleData(dataPointsRef.current) as any);
+              }
               hasInitialDataRef.current = true;
               // Fit content to show all data
               chartRef.current?.timeScale().fitContent();
@@ -105,11 +137,28 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
                     dataPointsRef.current.shift();
                   }
                   try {
-                    seriesRef.current.update(chartData);
+                    // Update based on chart type
+                    if (chartType === "candlestick" || chartType === "bar") {
+                      seriesRef.current.update(chartData);
+                    } else if (chartType === "histogram") {
+                      seriesRef.current.update({
+                        time: chartData.time,
+                        value: chartData.volume || 0,
+                        color: chartData.close >= chartData.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                      } as any);
+                    } else {
+                      seriesRef.current.update({ time: chartData.time, value: chartData.close } as any);
+                    }
                   } catch (error) {
                     // If update fails, reset with all data
                     console.warn('Failed to update chart, resetting data:', error);
-                    seriesRef.current.setData(dataPointsRef.current);
+                    if (chartType === "candlestick" || chartType === "bar") {
+                      seriesRef.current.setData(dataPointsRef.current as any);
+                    } else if (chartType === "histogram") {
+                      seriesRef.current.setData(convertToVolumeData(dataPointsRef.current) as any);
+                    } else {
+                      seriesRef.current.setData(convertToSimpleData(dataPointsRef.current) as any);
+                    }
                   }
                 } else {
                   // Older bar - ignore it (chart has moved forward)
@@ -118,7 +167,17 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
               } else {
                 // No existing data, add it
                 dataPointsRef.current.push(chartData);
-                seriesRef.current.update(chartData);
+                if (chartType === "candlestick" || chartType === "bar") {
+                  seriesRef.current.update(chartData);
+                } else if (chartType === "histogram") {
+                  seriesRef.current.update({
+                    time: chartData.time,
+                    value: chartData.volume || 0,
+                    color: chartData.close >= chartData.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                  } as any);
+                } else {
+                  seriesRef.current.update({ time: chartData.time, value: chartData.close } as any);
+                }
               }
             }
           }
@@ -164,7 +223,22 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
               low: newLow,
               volume: (existing.volume || 0) + (tradeData.size || 0)
             };
-            seriesRef.current.update(dataPointsRef.current[recentBarIndex] as any);
+            // Update based on chart type
+            if (chartType === "candlestick" || chartType === "bar") {
+              seriesRef.current.update(dataPointsRef.current[recentBarIndex] as any);
+            } else if (chartType === "histogram") {
+              const updated = dataPointsRef.current[recentBarIndex];
+              seriesRef.current.update({
+                time: updated.time,
+                value: updated.volume || 0,
+                color: updated.close >= updated.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+              } as any);
+            } else {
+              seriesRef.current.update({ 
+                time: dataPointsRef.current[recentBarIndex].time, 
+                value: dataPointsRef.current[recentBarIndex].close 
+              } as any);
+            }
           } else if (dataPointsRef.current.length > 0) {
             // No matching bar, update the last bar with new price
             const lastBar = dataPointsRef.current[dataPointsRef.current.length - 1];
@@ -178,7 +252,22 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
               low: newLow,
               volume: (lastBar.volume || 0) + (tradeData.size || 0)
             };
-            seriesRef.current.update(dataPointsRef.current[dataPointsRef.current.length - 1] as any);
+            // Update based on chart type
+            if (chartType === "candlestick" || chartType === "bar") {
+              seriesRef.current.update(dataPointsRef.current[dataPointsRef.current.length - 1] as any);
+            } else if (chartType === "histogram") {
+              const updated = dataPointsRef.current[dataPointsRef.current.length - 1];
+              seriesRef.current.update({
+                time: updated.time,
+                value: updated.volume || 0,
+                color: updated.close >= updated.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+              } as any);
+            } else {
+              seriesRef.current.update({ 
+                time: dataPointsRef.current[dataPointsRef.current.length - 1].time, 
+                value: dataPointsRef.current[dataPointsRef.current.length - 1].close 
+              } as any);
+            }
           }
         }
       }
@@ -208,6 +297,112 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
     }, 1000);
     return () => clearInterval(checkStatus);
   }, [symbol, isConnected, checkConnection]);
+
+  // Convert OHLC data to simple value data for line/area/baseline
+  const convertToSimpleData = (data: typeof dataPointsRef.current) => {
+    return data.map(dp => ({
+      time: dp.time,
+      value: dp.close
+    }));
+  };
+
+  // Convert OHLC data to volume data for histogram
+  const convertToVolumeData = (data: typeof dataPointsRef.current) => {
+    return data.map(dp => ({
+      time: dp.time,
+      value: dp.volume || 0,
+      color: dp.close >= dp.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+    }));
+  };
+
+  // Update chart type
+  useEffect(() => {
+    if (!chartRef.current || !hasInitialDataRef.current) return;
+
+    // Remove existing series
+    if (seriesRef.current) {
+      chartRef.current.removeSeries(seriesRef.current);
+    }
+
+    let newSeries: ISeriesApi<any>;
+
+    switch (chartType) {
+      case "candlestick":
+        newSeries = chartRef.current.addCandlestickSeries({
+          upColor: "#22c55e",
+          downColor: "#ef4444",
+          borderVisible: false,
+          wickUpColor: "#22c55e",
+          wickDownColor: "#ef4444",
+        });
+        newSeries.setData(dataPointsRef.current as any);
+        break;
+
+      case "bar":
+        newSeries = chartRef.current.addBarSeries({
+          upColor: "#22c55e",
+          downColor: "#ef4444",
+        });
+        newSeries.setData(dataPointsRef.current as any);
+        break;
+
+      case "line":
+        newSeries = chartRef.current.addLineSeries({
+          color: "#2962FF",
+          lineWidth: 2,
+        });
+        newSeries.setData(convertToSimpleData(dataPointsRef.current) as any);
+        break;
+
+      case "area":
+        newSeries = chartRef.current.addAreaSeries({
+          lineColor: "#2962FF",
+          topColor: "rgba(41, 98, 255, 0.4)",
+          bottomColor: "rgba(41, 98, 255, 0.0)",
+        });
+        newSeries.setData(convertToSimpleData(dataPointsRef.current) as any);
+        break;
+
+      case "baseline":
+        const baseValue = dataPointsRef.current.length > 0 
+          ? dataPointsRef.current[0].close 
+          : lastPrice || 0;
+        newSeries = chartRef.current.addBaselineSeries({
+          baseValue: { type: "price", price: baseValue },
+          topLineColor: "rgba(34, 197, 94, 1)",
+          topFillColor1: "rgba(34, 197, 94, 0.28)",
+          topFillColor2: "rgba(34, 197, 94, 0.05)",
+          bottomLineColor: "rgba(239, 68, 68, 1)",
+          bottomFillColor1: "rgba(239, 68, 68, 0.05)",
+          bottomFillColor2: "rgba(239, 68, 68, 0.28)",
+        });
+        newSeries.setData(convertToSimpleData(dataPointsRef.current) as any);
+        break;
+
+      case "histogram":
+        newSeries = chartRef.current.addHistogramSeries({
+          color: "#22c55e",
+          priceFormat: {
+            type: "volume",
+          },
+        });
+        newSeries.setData(convertToVolumeData(dataPointsRef.current) as any);
+        break;
+
+      default:
+        newSeries = chartRef.current.addCandlestickSeries({
+          upColor: "#22c55e",
+          downColor: "#ef4444",
+          borderVisible: false,
+          wickUpColor: "#22c55e",
+          wickDownColor: "#ef4444",
+        });
+        newSeries.setData(dataPointsRef.current as any);
+    }
+
+    seriesRef.current = newSeries;
+    chartRef.current.timeScale().fitContent();
+  }, [chartType, lastPrice]);
 
   // Reset data when symbol changes
   useEffect(() => {
@@ -244,7 +439,8 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
       },
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({
+    // Initialize with candlestick series (will be changed by chartType effect)
+    const initialSeries = chart.addCandlestickSeries({
       upColor: "#22c55e",
       downColor: "#ef4444",
       borderVisible: false,
@@ -253,10 +449,10 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
     });
 
     // Initialize with empty data
-    candlestickSeries.setData([]);
+    initialSeries.setData([]);
 
     chartRef.current = chart;
-    seriesRef.current = candlestickSeries;
+    seriesRef.current = initialSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -273,6 +469,8 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
       dataPointsRef.current = [];
     };
   }, []);
+
+  const chartTypes: ChartType[] = ["candlestick", "bar", "line", "area", "baseline", "histogram"];
 
   return (
     <div className="w-full">
@@ -291,18 +489,42 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div
-            className="h-3 w-3 rounded-full"
-            style={{
-              backgroundColor: isConnected ? "var(--green-9)" : "var(--red-9)",
-            }}
-          />
-          <span style={{ color: "var(--slate-11)" }}>
-            {isConnected ? "Live" : "Disconnected"}
-          </span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div
+              className="h-3 w-3 rounded-full"
+              style={{
+                backgroundColor: isConnected ? "var(--green-9)" : "var(--red-9)",
+              }}
+            />
+            <span style={{ color: "var(--slate-11)" }}>
+              {isConnected ? "Live" : "Disconnected"}
+            </span>
+          </div>
         </div>
       </div>
+      
+      {/* Chart Type Selector */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {chartTypes.map((type) => (
+          <button
+            key={type}
+            onClick={() => setChartType(type)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              chartType === type
+                ? "bg-blue-600 text-white"
+                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            }`}
+            style={{
+              backgroundColor: chartType === type ? "var(--blue-9)" : "var(--slate-7)",
+              color: chartType === type ? "white" : "var(--slate-11)",
+            }}
+          >
+            {type.charAt(0).toUpperCase() + type.slice(1)}
+          </button>
+        ))}
+      </div>
+      
       <div ref={chartContainerRef} className="w-full" style={{ minHeight: '400px' }} />
     </div>
   );

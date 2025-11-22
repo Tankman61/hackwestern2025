@@ -27,15 +27,11 @@ export default function PolymarketPanel() {
   }, []);
 
   return (
-    <div className="border-r p-3 flex flex-col" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+    <div className="border-r p-3 flex flex-col h-full" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
       <Flex justify="between" align="center" className="mb-2">
-        <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
-          Prediction Markets
+        <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-12)' }}>
+          PREDICTION MARKETS
         </Text>
-        <div className="flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--blue-9)' }}></div>
-          <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>POLYMARKET</Text>
-        </div>
       </Flex>
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
         {loading ? (

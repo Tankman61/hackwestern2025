@@ -16,6 +16,7 @@ import ETFsHoldings from "./components/holdings/ETFsHoldings";
 import PolymarketPanel from "./components/PolymarketPanel";
 import TradingPanel from "./components/TradingPanel";
 import LiveAlpacaChart from "./components/LiveAlpacaChart";
+import CryptoHoldingsDashboard from "./components/CryptoHoldingsDashboard";
 import { api, type RedditPost, type SentimentStats } from "@/app/lib/api";
 
 type PortfolioView = "crypto" | "stocks" | "options" | "etfs" | null;
@@ -57,6 +58,7 @@ export default function Home() {
   const [subredditDropdownOpen, setSubredditDropdownOpen] = useState(false);
   const [activePortfolio, setActivePortfolio] = useState<PortfolioView>(null);
   const [activeHoldings, setActiveHoldings] = useState<HoldingsView>(null);
+  const [homeResetKey, setHomeResetKey] = useState(0);
 
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
@@ -187,26 +189,11 @@ export default function Home() {
   return (
     <main className="h-screen w-screen overflow-hidden" style={{ background: 'var(--slate-1)' }}>
       {/* Top Bar */}
-      <div className="h-12 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-        <Flex align="center" gap="4">
-          <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>
-            BTC/USD
-          </Text>
-          <div className="h-4 w-px" style={{ background: 'var(--slate-6)' }}></div>
-          <Text size="1" style={{ color: 'var(--slate-11)' }}>
-            BITSTAMP
-          </Text>
-          <Text size="3" weight="bold" className="font-mono ml-4" style={{ color: priceChangeColor }}>
-            {currentPrice}
-          </Text>
-          <Text size="1" style={{ color: priceChangeColor }}>
-            {priceChangePrefix}{priceChange}%
-          </Text>
-        </Flex>
+      <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green-9)' }}></div>
-            <Text size="1" className="font-mono" style={{ color: 'var(--slate-11)' }}>
+            <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)' }}>
               {currentTime || "00:00:00"} UTC
             </Text>
           </div>
@@ -227,6 +214,12 @@ export default function Home() {
           setActivePortfolio(null);
           setSideMenuOpen(false);
         }}
+        onHomeSelect={() => {
+          setActivePortfolio(null);
+          setActiveHoldings(null);
+          setSideMenuOpen(false);
+          setHomeResetKey(prev => prev + 1); // Trigger reset of holdings dashboard filter
+        }}
       />
 
       <div className="grid h-[calc(100vh-3rem)] gap-0" style={{
@@ -237,13 +230,36 @@ export default function Home() {
         <div className="flex flex-col">
           {activePortfolio === null && activeHoldings === null ? (
             <>
-              {/* Main Chart Area */}
-              <div className="flex-1 border-r p-6" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-                <LiveAlpacaChart symbol="BTC" dataType="crypto" />
+              {/* Crypto Holdings Dashboard */}
+              <div className="flex-1 border-r overflow-hidden" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+                <CryptoHoldingsDashboard 
+                  key={homeResetKey}
+                  resetFilter={homeResetKey > 0}
+                  onHoldingClick={(holding) => {
+                    // Navigate to the appropriate holdings view based on type
+                    const holdingsViewMap: Record<string, HoldingsView> = {
+                      crypto: "crypto-holdings",
+                      stocks: "stocks-holdings",
+                      options: "options-holdings",
+                      etfs: "etfs-holdings"
+                    };
+                    const holdingsView = holdingsViewMap[holding.type];
+                    if (holdingsView) {
+                      setActiveHoldings(holdingsView);
+                      // Store the holding to select in the holdings component
+                      // We'll need to pass this through props or context
+                      setTimeout(() => {
+                        // Use a small delay to ensure the component is mounted
+                        const event = new CustomEvent('selectHolding', { detail: holding });
+                        window.dispatchEvent(event);
+                      }, 100);
+                    }
+                  }}
+                />
               </div>
 
               {/* Bottom Data Panels */}
-              <div className="h-64 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
+              <div className="h-96 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
                 {/* VTuber Profile Card */}
                 <div
                   className="border-r cursor-pointer flex items-center justify-center"
@@ -404,7 +420,7 @@ export default function Home() {
             </>
           ) : (
             <>
-              {activeHoldings === "crypto-holdings" && <CryptoHoldings />}
+              {activeHoldings === "crypto-holdings" && <CryptoHoldings onReturn={() => setActiveHoldings(null)} />}
               {activeHoldings === "stocks-holdings" && <StocksHoldings />}
               {activeHoldings === "options-holdings" && <OptionsHoldings />}
               {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
