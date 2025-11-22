@@ -1,9 +1,130 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, Flex, Heading, Text, Button, Badge, Box, TextField, ScrollArea, TextArea } from "@radix-ui/themes";
+import { Card, Flex, Heading, Text, Button, Badge, Box, TextField, ScrollArea, TextArea, DropdownMenu } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ClipboardIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ClipboardIcon, ChevronDownIcon } from "@radix-ui/react-icons";
+
+const subredditOptions = [
+  "All",
+  "r/Polymarket",
+  "r/PredictionMarket",
+  "r/wallstreetbets",
+  "r/pennystocks",
+  "r/cryptocurrency",
+  "r/daytrading",
+] as const;
+
+type SubredditOption = typeof subredditOptions[number];
+
+type SentimentPost = {
+  time: string;
+  author: string;
+  snippet: string;
+  sentiment: "bullish" | "bearish";
+  subreddit?: string;
+};
+
+type SubredditEntry = {
+  stats: { bullish: number; bearish: number; score: number; volume: string };
+  posts: SentimentPost[];
+};
+
+const individualSubredditData: Record<Exclude<SubredditOption, "All">, SubredditEntry> = {
+  "r/Polymarket": {
+    stats: { bullish: 64, bearish: 36, score: 32, volume: "1.1k" },
+    posts: [
+      { time: "3m ago", author: "u/polymarketnerd", snippet: "Election odds flipped after overnight whale order. Keep an eye on BTC tails.", sentiment: "bullish" },
+      { time: "7m ago", author: "u/degenalpha", snippet: "Liquidity thin beyond $100k strike. Expect volatility spikes.", sentiment: "bearish" },
+      { time: "15m ago", author: "u/spreadsheetbot", snippet: "New contract on ETH ETF approval priced at 58% with fresh bids.", sentiment: "bullish" },
+    ],
+  },
+  "r/PredictionMarket": {
+    stats: { bullish: 58, bearish: 42, score: 18, volume: "900" },
+    posts: [
+      { time: "1m ago", author: "u/marketmaker42", snippet: "Calm before CPI print. Odds are pricing soft landing already.", sentiment: "bearish" },
+      { time: "9m ago", author: "u/alphaoracle", snippet: "Big surge on macro basket. Watching for follow-through if dollar cools.", sentiment: "bullish" },
+      { time: "18m ago", author: "u/datalake", snippet: "PredictionBook consensus now above 65 for BTC > 110k.", sentiment: "bullish" },
+    ],
+  },
+  "r/wallstreetbets": {
+    stats: { bullish: 72, bearish: 28, score: 44, volume: "2.4k" },
+    posts: [
+      { time: "2m ago", author: "u/cryptowhale", snippet: "BTC breaking out. This is not a drill. Load up now before...", sentiment: "bullish" },
+      { time: "5m ago", author: "u/tradingpro", snippet: "Volume looking weak. Expecting pullback to 95k support...", sentiment: "bearish" },
+      { time: "12m ago", author: "u/moonboy", snippet: "100k by Christmas. Diamond hands only. HODL the line!", sentiment: "bullish" },
+    ],
+  },
+  "r/pennystocks": {
+    stats: { bullish: 49, bearish: 51, score: -6, volume: "1.7k" },
+    posts: [
+      { time: "4m ago", author: "u/microcapmamba", snippet: "Moving some profits into BTC pairs while liquidity is high.", sentiment: "bullish" },
+      { time: "10m ago", author: "u/bagholderdan", snippet: "Rotating out of risky alts until BTC chills.", sentiment: "bearish" },
+      { time: "22m ago", author: "u/scalpszn", snippet: "Watching microcap miners if BTC holds 98.5k.", sentiment: "bullish" },
+    ],
+  },
+  "r/cryptocurrency": {
+    stats: { bullish: 66, bearish: 34, score: 28, volume: "5.9k" },
+    posts: [
+      { time: "3m ago", author: "u/glassnodewiz", snippet: "Exchange reserves at 4-year lows. Supply shock incoming?", sentiment: "bullish" },
+      { time: "8m ago", author: "u/regwatcher", snippet: "Rumors of stricter leverage rules in EU desks.", sentiment: "bearish" },
+      { time: "17m ago", author: "u/ethbull", snippet: "ETH/BTC looks primed for reversal; derivatives funding cooling.", sentiment: "bullish" },
+    ],
+  },
+  "r/daytrading": {
+    stats: { bullish: 54, bearish: 46, score: 12, volume: "3.1k" },
+    posts: [
+      { time: "1m ago", author: "u/tape_reader", snippet: "Scalping BTC microstructure, bids refreshing every 250 ticks.", sentiment: "bullish" },
+      { time: "6m ago", author: "u/orderflowjoe", snippet: "Seeing trapped longs above 99k. Watching for flush.", sentiment: "bearish" },
+      { time: "16m ago", author: "u/l2wizard", snippet: "Delta flipping green on Binance perps, could squeeze shorts.", sentiment: "bullish" },
+    ],
+  },
+};
+
+const parseVolume = (volume: string) => {
+  const normalized = volume.trim().toLowerCase();
+  if (normalized.endsWith("m")) return parseFloat(normalized) * 1_000_000;
+  if (normalized.endsWith("k")) return parseFloat(normalized) * 1_000;
+  return parseFloat(normalized) || 0;
+};
+
+const formatVolume = (value: number) => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${Math.round(value)}`;
+};
+
+const aggregateSubredditData = (): SubredditEntry => {
+  const entries = Object.entries(individualSubredditData) as [Exclude<SubredditOption, "All">, SubredditEntry][];
+  const count = entries.length || 1;
+  const avg = (getter: (entry: SubredditEntry) => number) =>
+    Math.round(entries.reduce((sum, [, data]) => sum + getter(data), 0) / count);
+  const totalVolume = entries.reduce((sum, [, data]) => sum + parseVolume(data.stats.volume), 0);
+
+  const aggregatedPosts = entries
+    .flatMap(([subreddit, data]) =>
+      data.posts.map((post) => ({
+        ...post,
+        subreddit,
+      }))
+    )
+    .slice(0, 12);
+
+  return {
+    stats: {
+      bullish: avg((data) => data.stats.bullish),
+      bearish: avg((data) => data.stats.bearish),
+      score: avg((data) => data.stats.score),
+      volume: formatVolume(totalVolume),
+    },
+    posts: aggregatedPosts,
+  };
+};
+
+const subredditData: Record<SubredditOption, SubredditEntry> = {
+  All: aggregateSubredditData(),
+  ...individualSubredditData,
+};
 
 export default function Home() {
   const [agentExpanded, setAgentExpanded] = useState(false);
@@ -24,6 +145,8 @@ export default function Home() {
     { role: "user", text: "What's the market looking like?", time: "14:30:45" },
     { role: "agent", text: "BTC just broke resistance at $98.5k with crazy volume! Polymarket odds jumped +12% in 5 min - whales are moving. This could be big! 🚀", time: "14:31:01" },
   ]);
+  const [selectedSubreddit, setSelectedSubreddit] = useState<SubredditOption>(subredditOptions[0]);
+  const [subredditDropdownOpen, setSubredditDropdownOpen] = useState(false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -35,18 +158,23 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    setSentimentExpanded(false);
+  }, [selectedSubreddit]);
+
   const polymarkets = [
     { question: "Bitcoin > $100k by Dec 31", probability: 68, change: "+12%", volume: "2.4M" },
     { question: "BTC to hit $120k in 2025", probability: 42, change: "+8%", volume: "1.8M" },
     { question: "Bitcoin ETF approval", probability: 89, change: "-2%", volume: "5.1M" },
     { question: "BTC above $90k EOY", probability: 76, change: "+5%", volume: "3.2M" },
   ];
-
-  const redditPosts = [
-    { time: "2m ago", author: "u/cryptowhale", snippet: "BTC breaking out. This is not a drill. Load up now before...", sentiment: "bullish" },
-    { time: "5m ago", author: "u/tradingpro", snippet: "Volume looking weak. Expecting pullback to 95k support...", sentiment: "bearish" },
-    { time: "12m ago", author: "u/moonboy", snippet: "100k by Christmas. Diamond hands only. HODL the line!", sentiment: "bullish" },
-  ];
+  const activeSubreddit = subredditData[selectedSubreddit];
+  const fallbackSentiment = subredditData["All"].stats;
+  const sentimentStats = activeSubreddit?.stats ?? fallbackSentiment;
+  const sentimentScoreLabel = sentimentStats.score > 0 ? `+${sentimentStats.score}` : `${sentimentStats.score}`;
+  const redditPosts = activeSubreddit?.posts ?? [];
+  const currentSubredditLink =
+    selectedSubreddit === "All" ? "https://reddit.com/r/all" : `https://reddit.com/${selectedSubreddit}`;
 
   const handleSendMessage = () => {
     if (!messageInput.trim()) return;
@@ -202,47 +330,102 @@ export default function Home() {
               style={{ background: 'var(--slate-2)' }}
               onClick={() => setSentimentExpanded(!sentimentExpanded)}
             >
-              <Flex justify="between" align="center" className="mb-2">
+              <Flex justify="between" align="center" className="mb-0" style={{ marginBottom: '0.1rem' }}>
                 <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
                   Social Sentiment
                 </Text>
-                <Text size="1" style={{ color: 'var(--slate-11)' }}>r/wallstreetbets</Text>
+                <DropdownMenu.Root
+                  open={subredditDropdownOpen}
+                  onOpenChange={(open) => {
+                    setSubredditDropdownOpen(open);
+                    if (open) setSentimentExpanded(false);
+                  }}
+                >
+                  <DropdownMenu.Trigger>
+                    <Button
+                      variant="ghost"
+                      color="blue"
+                      size="1"
+                      radius="full"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', paddingInline: '0.75rem' }}
+                    >
+                      <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>
+                        {selectedSubreddit}
+                      </Text>
+                      <ChevronDownIcon width="12" height="12" style={{ color: 'var(--blue-11)' }} />
+                    </Button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content
+                    side="top"
+                    align="end"
+                    sideOffset={6}
+                    collisionPadding={8}
+                    variant="soft"
+                    color="blue"
+                    size="1"
+                    style={{ maxHeight: '130px', overflowY: 'auto', minWidth: '190px' }}
+                  >
+                    {subredditOptions.map((option) => (
+                      <DropdownMenu.Item
+                        key={option}
+                        onSelect={() => {
+                          setSelectedSubreddit(option);
+                          setSentimentExpanded(false);
+                          setSubredditDropdownOpen(false);
+                        }}
+                        className="cursor-pointer"
+                        style={{
+                          fontWeight: option === selectedSubreddit ? 600 : 400,
+                          color: option === selectedSubreddit ? 'var(--blue-12)' : 'var(--slate-12)'
+                        }}
+                      >
+                        {option}
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
               </Flex>
 
               {!sentimentExpanded ? (
-                <div className="flex-1 flex flex-col justify-center px-2">
-                  <Flex direction="column" gap="4" className="mt-4">
+                <div className="flex-1 flex flex-col justify-start px-2">
+                  <Flex direction="column" gap="2" className="mt-2">
                     <div>
-                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Bullish/Bearish Ratio</Text>
-                      <Flex align="baseline" gap="2">
-                        <Text size="5" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>72</Text>
+                      <Text size="1" className="block" style={{ color: 'var(--slate-11)', marginBottom: '0.15rem' }}>Bullish/Bearish Ratio</Text>
+                      <Flex align="baseline" gap="1">
+                        <Text size="5" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>{sentimentStats.bullish}</Text>
                         <Text size="2" style={{ color: 'var(--slate-11)' }}>/</Text>
-                        <Text size="5" weight="bold" className="font-mono" style={{ color: 'var(--red-10)' }}>28</Text>
+                        <Text size="5" weight="bold" className="font-mono" style={{ color: 'var(--red-10)' }}>{sentimentStats.bearish}</Text>
                       </Flex>
                     </div>
                     <div>
-                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Sentiment Score</Text>
-                      <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--green-11)' }}>+44</Text>
+                      <Text size="1" className="block" style={{ color: 'var(--slate-11)', marginBottom: '0.15rem' }}>Sentiment Score</Text>
+                      <Text size="4" weight="bold" className="font-mono" style={{ color: sentimentStats.score >= 0 ? 'var(--green-11)' : 'var(--red-10)' }}>{sentimentScoreLabel}</Text>
                     </div>
                     <div>
-                      <Text size="1" className="mb-2 block" style={{ color: 'var(--slate-11)' }}>Post Volume (24h)</Text>
-                      <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>2.4k</Text>
+                      <Text size="1" className="block" style={{ color: 'var(--slate-11)', marginBottom: '0.15rem' }}>Post Volume (24h)</Text>
+                      <Text size="4" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>{sentimentStats.volume}</Text>
                     </div>
                   </Flex>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin" style={{ maxHeight: '200px' }}>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin mt-2" style={{ maxHeight: '200px' }}>
                   {redditPosts.map((post, idx) => (
                     <a
                       key={idx}
-                      href="https://reddit.com/r/wallstreetbets"
+                      href={post.subreddit ? `https://reddit.com/${post.subreddit}` : currentSubredditLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block p-2 border rounded"
                       style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)', textDecoration: 'none' }}
                     >
                       <Flex justify="between" className="mb-1">
-                        <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>{post.author}</Text>
+                        <div>
+                          <Text size="1" weight="medium" style={{ color: 'var(--blue-11)' }}>{post.author}</Text>
+                          {post.subreddit && (
+                            <Text size="1" className="block" style={{ color: 'var(--slate-10)' }}>{post.subreddit}</Text>
+                          )}
+                        </div>
                         <Text size="1" style={{ color: 'var(--slate-11)' }}>{post.time}</Text>
                       </Flex>
                       <Text size="1" className="leading-relaxed" style={{ color: 'var(--slate-12)' }}>
@@ -529,7 +712,7 @@ export default function Home() {
                 >
                   {tradeType === "long" ? "Open Long Position" : "Open Short Position"}
                 </Button>
-                <Flex justify="center" align="center" gap="1" className="mt-2">
+                <Flex justify="center" align="center" gap="1" className="mt-4">
                   <div className="w-1 h-1 rounded-full" style={{ background: 'var(--red-9)' }}></div>
                   <Text size="1" style={{ color: 'var(--slate-11)' }}>
                     Risk: High (73/100)
