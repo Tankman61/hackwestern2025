@@ -105,8 +105,6 @@ export default function Home() {
     { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm", voice: "nova" },
     { id: "twinkie", name: "Twinkie", image: "/twinkie_profile.png", vrm: "/twinkie.vrm", voice: "shimmer", cameraOffset: { y: 1.2 } },
     { id: "chaewon", name: "Chaewon", image: "/chaewon_profile.png", vrm: "/chaewon.vrm", voice: "alloy", cameraOffset: { y: 0.3 } },
-    { id: "obama", name: "Obama", image: "/obama_profile.png", vrm: "/obama/scene.gltf", voice: "onyx", isGltf: true, cameraOffset: { y: 1.2 } },
-    { id: "rumi", name: "Rumi", image: "/rumi_profile.png", vrm: "/rumi__fortnite__kpop_demon_hunters_3d_model/scene.gltf", voice: "echo", isGltf: true, cameraOffset: { y: 0.3 } },
   ];
   const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
 
@@ -940,13 +938,13 @@ export default function Home() {
                         <motion.div
                           className="h-[700px] rounded-3xl overflow-hidden relative"
                           style={{
-                            width: '300px', // Double the width (150px -> 300px)
+                            width: '400px', // Wider default width for 3 characters
                             background: 'rgba(0,0,0,0.3)', // Dark transparent background
                             border: '4px solid rgba(255,255,255,0.4)', // Larger, more prominent border
                             boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                           }}
                           whileHover={{
-                            width: '600px', // Double the width (300px -> 600px)
+                            width: '800px', // Wider hover width for 3 characters
                             transition: { duration: 0.3, ease: "easeOut" }
                           }}
                         >
