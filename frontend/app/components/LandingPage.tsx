@@ -306,6 +306,155 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
         </div>
       </div>
 
+      {/* Product Features Section */}
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-20 px-8">
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            className="text-center mb-16"
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+          >
+            <h2 
+              className="text-6xl font-bold mb-4 text-center"
+              style={{
+                color: '#831843',
+                fontFamily: 'var(--font-playfair), Georgia, serif',
+                fontStyle: 'italic',
+              }}
+            >
+              What Makes VibeTrader Different?
+            </h2>
+            <p className="text-xl mt-6" style={{ color: '#9f1239' }}>
+              We don't just show you data—we actively protect your capital with AI-powered risk management
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-12 mt-16">
+            {/* Feature 1: AI Agent */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4"></div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Interrupting AI Agent
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                Unlike passive dashboards, our AI agent actively interrupts your session when it detects market anomalies. 
+                It doesn't just warn you—it can lock your account to prevent bad trades and guide you through volatile markets 
+                with a personality-driven coaching style.
+              </p>
+            </motion.div>
+
+            {/* Feature 2: Divergence Detection */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4"></div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Multi-Source Divergence Detection
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                We analyze the correlation between spot prices, prediction market odds, and social sentiment. 
+                When these signals diverge (e.g., price goes up but prediction odds collapse), our system flags 
+                potential market anomalies before they become obvious to retail traders.
+              </p>
+            </motion.div>
+
+            {/* Feature 3: Real-time Risk Scoring */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4">⚡</div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Real-Time Risk Scoring
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                Our risk engine calculates a dynamic risk score (0-100) every second by combining sentiment analysis, 
+                technical indicators, and prediction market divergence. When risk exceeds 80, the AI agent automatically 
+                intervenes to protect your capital.
+              </p>
+            </motion.div>
+
+            {/* Feature 4: Voice-Powered Trading */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.6 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4">🎙️</div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Voice-Powered Trading Companion
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                Talk to your AI trading coach naturally. Ask questions, get real-time market insights, and execute trades 
+                through conversation. Our AI agent uses advanced voice synthesis to provide emotional, context-aware responses 
+                that adapt to market conditions.
+              </p>
+            </motion.div>
+
+            {/* Feature 5: Autonomous Protection */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.8 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4"></div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Autonomous Capital Protection
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                During extreme market events, our AI can autonomously execute protective trades and lock your account 
+                to prevent panic-driven decisions. It's like having a professional risk manager watching your portfolio 24/7, 
+                except this one never sleeps and has zero tolerance for bad trades.
+              </p>
+            </motion.div>
+
+            {/* Feature 6: Multi-Platform Data Fusion */}
+            <motion.div
+              className="bg-white rounded-2xl p-8 shadow-lg border-2"
+              style={{ borderColor: '#fce7f3' }}
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 1.0 }}
+              viewport={{ once: true }}
+            >
+              <div className="text-5xl mb-4">🔗</div>
+              <h3 className="text-3xl font-bold mb-4" style={{ color: '#831843' }}>
+                Unified Data Platform
+              </h3>
+              <p className="text-lg leading-relaxed" style={{ color: '#9f1239' }}>
+                We aggregate live data from Polymarket prediction markets, Reddit sentiment analysis, and real-time 
+                price feeds—all in one place. No more switching between multiple tabs and platforms. Everything you need 
+                to make informed trading decisions is unified and analyzed for you.
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
