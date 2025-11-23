@@ -58,9 +58,11 @@ export default function PolymarketPanel() {
                   <Text size="4" weight="bold" className="font-mono" style={{ color: market.change.startsWith('+') ? 'var(--green-11)' : 'var(--red-10)' }}>
                     {market.probability}%
                   </Text>
-                  <Text size="1" style={{ color: market.change.startsWith('+') ? 'var(--green-11)' : 'var(--red-10)' }}>
-                    {market.change}
-                  </Text>
+                  {market.change !== '+0%' && (
+                    <Text size="1" style={{ color: market.change.startsWith('+') ? 'var(--green-11)' : 'var(--red-10)' }}>
+                      {market.change}
+                    </Text>
+                  )}
                 </Flex>
                 <Text size="1" style={{ color: 'var(--slate-11)' }}>Vol: {market.volume}</Text>
               </Flex>
