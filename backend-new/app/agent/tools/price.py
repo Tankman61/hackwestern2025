@@ -42,22 +42,30 @@ async def get_current_price(symbol: str = "BTC") -> str:
                 return f"ERROR: No price data in response for {symbol}"
 
         # Format price for speech-friendly output
-        dollars = int(price)
-        cents = int((price - dollars) * 100)
-
-        # Create speech-friendly price string
-        if cents > 0:
-            price_speech = f"${dollars:,} and {cents} cents"
+        if price >= 1000:
+            thousands = int(price / 1000)
+            remainder = price % 1000
+            dollars = int(remainder)
+            cents = int((remainder - dollars) * 100)
+            if cents > 0:
+                price_speech = f"{thousands} thousand {dollars} dollars and {cents} cents"
+            elif dollars > 0:
+                price_speech = f"{thousands} thousand {dollars} dollars"
+            else:
+                price_speech = f"{thousands} thousand dollars"
         else:
-            price_speech = f"${dollars:,}"
+            dollars = int(price)
+            cents = int((price - dollars) * 100)
+            if cents > 0:
+                price_speech = f"{dollars} dollars and {cents} cents"
+            else:
+                price_speech = f"{dollars} dollars"
 
-        return f"""
-LIVE PRICE: {price_speech} (${price:,.2f})
+        return f"""LIVE PRICE: {price_speech}
 Symbol: {symbol}
-Source: Finnhub WebSocket (real-time)
+Source: Finnhub WebSocket real-time
 
-This is the CURRENT market price right now.
-""".strip()
+This is the CURRENT market price right now.""".strip()
 
     except httpx.HTTPError as e:
         return f"ERROR: Failed to fetch price for {symbol} from API: {str(e)}"

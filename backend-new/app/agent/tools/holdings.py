@@ -43,32 +43,62 @@ async def list_holdings() -> str:
             positions_response.raise_for_status()
             positions = positions_response.json()
 
-        # Format portfolio info
-        result = f"""
-PORTFOLIO BALANCE: ${portfolio.get('balance_usd', 0):,.2f}
-TOTAL VALUE: ${portfolio.get('total_value', 0):,.2f}
-P&L: ${portfolio.get('pnl_total', 0):+,.2f} ({portfolio.get('pnl_percent', 0):+.2f}%)
-"""
+        # Helper function to convert numbers to speech-friendly format
+        def format_price_speech(price):
+            if price >= 1000:
+                thousands = int(price / 1000)
+                remainder = price % 1000
+                dollars = int(remainder)
+                cents = int((remainder - dollars) * 100)
+                if cents > 0:
+                    return f"{thousands} thousand {dollars} dollars and {cents} cents"
+                elif dollars > 0:
+                    return f"{thousands} thousand {dollars} dollars"
+                else:
+                    return f"{thousands} thousand dollars"
+            else:
+                dollars = int(price)
+                cents = int((price - dollars) * 100)
+                if cents > 0:
+                    return f"{dollars} dollars and {cents} cents"
+                return f"{dollars} dollars"
+
+        # Format portfolio info (no markdown)
+        balance = portfolio.get('balance_usd', 0)
+        total_value = portfolio.get('total_value', 0)
+        pnl_total = portfolio.get('pnl_total', 0)
+        pnl_percent = portfolio.get('pnl_percent', 0)
+
+        result = f"""PORTFOLIO BALANCE: {format_price_speech(balance)}
+TOTAL VALUE: {format_price_speech(total_value)}
+P&L: {"up" if pnl_total >= 0 else "down"} {format_price_speech(abs(pnl_total))} ({pnl_percent:+.2f}%)"""
 
         # Add lock status if locked
         if portfolio.get('is_locked', False):
-            result += f"⚠️ ACCOUNT LOCKED: {portfolio.get('lock_reason', 'Unknown reason')}\n"
+            result += f"\n\nWARNING ACCOUNT LOCKED: {portfolio.get('lock_reason', 'Unknown reason')}"
 
         # Add positions
         if positions and len(positions) > 0:
-            result += f"\nOPEN POSITIONS ({len(positions)}):\n"
+            result += f"\n\nOPEN POSITIONS ({len(positions)}):"
             for pos in positions:
+                # Use correct field names from /api/positions endpoint
                 side = pos.get('side', 'UNKNOWN')
-                ticker = pos.get('ticker', 'UNKNOWN')
-                amount = pos.get('amount', 0)
-                entry = pos.get('entry_price', 0)
+                ticker = pos.get('symbol', 'UNKNOWN')
+                amount = pos.get('qty', 0)
+                entry = pos.get('avg_entry_price', 0)
                 current = pos.get('current_price', 0)
-                pnl = pos.get('pnl', 0)
-                pnl_pct = pos.get('pnl_percent', 0)
+                pnl = pos.get('live_pnl', 0)
+                pnl_pct = pos.get('live_pnl_percent', 0)
 
-                result += f"- {side} {amount} {ticker} @ ${entry:,.2f} (now ${current:,.2f}) | P&L: ${pnl:+,.2f} ({pnl_pct:+.2f}%)\n"
+                # Format entry and current price for speech
+                entry_speech = format_price_speech(entry)
+                current_speech = format_price_speech(current)
+                pnl_speech = format_price_speech(abs(pnl))
+                pnl_direction = "profit" if pnl >= 0 else "loss"
+
+                result += f"\n- {side} {amount} {ticker} bought at {entry_speech}, now worth {current_speech}, {pnl_direction} of {pnl_speech} ({pnl_pct:+.2f}%)"
         else:
-            result += "\nNO OPEN POSITIONS\n"
+            result += "\n\nNO OPEN POSITIONS"
 
         return result.strip()
 

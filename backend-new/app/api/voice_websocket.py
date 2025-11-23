@@ -26,6 +26,7 @@ class VoiceSession:
         self.thread_id = thread_id
         self.stt = None
         self.tts = None
+        self.tts_task = None  # Track ongoing TTS task for interruption
         self.is_speaking = False
         self.current_transcript = ""
 
@@ -57,6 +58,21 @@ class VoiceSession:
     async def handle_audio_input(self, audio_base64: str):
         """Handle incoming audio from user"""
         try:
+            # INTERRUPT: If agent is speaking, stop immediately
+            if self.is_speaking and self.tts_task and not self.tts_task.done():
+                logger.info("🛑 User interrupted - cancelling TTS")
+                self.tts_task.cancel()
+                try:
+                    await self.tts_task
+                except asyncio.CancelledError:
+                    pass
+                self.is_speaking = False
+                # Notify frontend speech was interrupted
+                await self.send_message({
+                    "type": "agent_speaking",
+                    "is_speaking": False
+                })
+
             # Check if STT needs reconnection
             needs_reconnect = False
             if not self.stt or not self.stt.websocket:
@@ -85,8 +101,7 @@ class VoiceSession:
                 success = await self.stt.connect(sample_rate=16000, codec="pcm")
                 if success:
                     logger.info("✅ STT reconnected successfully")
-                    # Restart STT listener task
-                    import asyncio
+                    # Restart STT listener task (asyncio already imported at top)
                     asyncio.create_task(self.listen_to_stt())
                     # Now send the audio
                     await self.stt.send_audio(audio_base64, sample_rate=16000, commit=False)
@@ -180,9 +195,14 @@ class VoiceSession:
                 "text": agent_response_text
             })
 
-            # Convert to speech
+            # Convert to speech (track task for interruption)
             if agent_response_text:
-                await self.speak_response(agent_response_text)
+                self.tts_task = asyncio.create_task(self.speak_response(agent_response_text))
+                try:
+                    await self.tts_task
+                except asyncio.CancelledError:
+                    logger.info("TTS task was cancelled")
+                    pass
 
             # Done thinking
             await self.send_message({
@@ -203,6 +223,9 @@ class VoiceSession:
         tts = None
         try:
             logger.info(f"🔊 Speaking response: {text[:50]}...")
+
+            # Mark as speaking
+            self.is_speaking = True
 
             # Notify frontend agent is speaking
             await self.send_message({
@@ -228,6 +251,11 @@ class VoiceSession:
 
             # Stream audio chunks to frontend
             async for audio_chunk in tts.receive_audio():
+                # Check if we were interrupted
+                if not self.is_speaking:
+                    logger.info("🛑 TTS interrupted, stopping stream")
+                    break
+
                 # Encode audio as base64
                 audio_base64 = base64.b64encode(audio_chunk).decode("utf-8")
 
@@ -237,6 +265,7 @@ class VoiceSession:
                 })
 
             # Done speaking
+            self.is_speaking = False
             await self.send_message({
                 "type": "agent_speaking",
                 "is_speaking": False
@@ -244,8 +273,18 @@ class VoiceSession:
 
             logger.info("✅ Finished speaking response")
 
+        except asyncio.CancelledError:
+            # Task was cancelled (interrupted)
+            logger.info("🛑 TTS task cancelled (interrupted)")
+            self.is_speaking = False
+            await self.send_message({
+                "type": "agent_speaking",
+                "is_speaking": False
+            })
+            raise  # Re-raise to signal cancellation
         except Exception as e:
             logger.error(f"Error in speak_response: {e}")
+            self.is_speaking = False
             await self.send_error(f"TTS error: {str(e)}")
             await self.send_message({
                 "type": "agent_speaking",
@@ -255,6 +294,7 @@ class VoiceSession:
             # Close the TTS connection
             if tts:
                 await tts.close()
+            self.is_speaking = False
 
     async def send_message(self, message: Dict[str, Any]):
         """Send message to frontend"""

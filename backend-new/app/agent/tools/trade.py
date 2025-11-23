@@ -6,6 +6,7 @@ NOTE: This tool will pause for user approval in the LangGraph flow
 import httpx
 import os
 from langchain_core.tools import tool
+from app.agent.tools.format_helpers import format_price_speech, format_crypto_amount
 
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -72,21 +73,21 @@ async def execute_trade(
             response.raise_for_status()
             data = response.json()
 
-        # Format success response
-        order_id = data.get("id", "UNKNOWN")
+        # Format success response (no Order ID, no markdown)
         status = data.get("status", "UNKNOWN")
 
-        result = f"""
-✅ ORDER PLACED SUCCESSFULLY
-Order ID: {order_id}
+        # Format amount for crypto (handles decimals like 0.002)
+        amount_speech = format_crypto_amount(amount)
+
+        result = f"""ORDER PLACED SUCCESSFULLY
 Type: {order_type.upper()} {side.upper()}
 Ticker: {ticker}
-Amount: {amount}
-"""
-        if limit_price:
-            result += f"Limit Price: ${limit_price:,.2f}\n"
+Amount: {amount_speech}"""
 
-        result += f"Status: {status}\n"
+        if limit_price:
+            result += f"\nLimit Price: {format_price_speech(limit_price)}"
+
+        result += f"\nStatus: {status}"
 
         return result.strip()
 
