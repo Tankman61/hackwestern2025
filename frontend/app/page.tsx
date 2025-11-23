@@ -202,7 +202,7 @@ export default function Home() {
   const priceChangePrefix = parseFloat(priceChange) >= 0 ? '+' : '';
 
   return (
-    <main className="h-screen w-screen overflow-hidden" style={{ background: 'var(--slate-1)' }}>
+    <main className={`h-screen w-screen ${showLandingPage ? 'overflow-auto' : 'overflow-hidden'}`} style={{ background: 'var(--slate-1)' }}>
       {/* Top Bar */}
       <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
