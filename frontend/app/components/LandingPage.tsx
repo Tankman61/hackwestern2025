@@ -73,7 +73,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300 overflow-x-hidden"
+      className="h-[200vh] bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300 overflow-x-hidden"
       style={{
         background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 25%, #f9a8d4 50%, #f472b6 75%, #ec4899 100%)',
       }}
@@ -290,6 +290,77 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
           >
             Start Trading Now
           </motion.button>
+        </div>
+      </div>
+
+      {/* Scrollable Content Section */}
+      <div className="min-h-screen bg-white/10 backdrop-blur-sm py-20 px-8 flex items-center">
+        <div className="max-w-6xl mx-auto text-center">
+          <motion.h2
+            className="text-4xl font-bold mb-6"
+            style={{ color: '#831843' }}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+          >
+            Advanced Trading Intelligence
+          </motion.h2>
+          <motion.p
+            className="text-xl mb-8 max-w-3xl mx-auto"
+            style={{ color: '#9f1239' }}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            viewport={{ once: true }}
+          >
+            Experience the future of trading with our AI-powered companion that learns your patterns
+            and provides real-time insights to maximize your portfolio performance.
+          </motion.p>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <motion.div
+              className="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center"
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.1 }}
+              viewport={{ once: true }}
+            >
+              <div className="w-16 h-16 bg-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <span className="text-2xl">📊</span>
+              </div>
+              <h3 className="text-2xl font-bold mb-4" style={{ color: '#831843' }}>Real-time Analysis</h3>
+              <p style={{ color: '#9f1239' }}>Get instant market analysis and trading signals powered by advanced AI algorithms.</p>
+            </motion.div>
+
+            <motion.div
+              className="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center"
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              viewport={{ once: true }}
+            >
+              <div className="w-16 h-16 bg-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <span className="text-2xl">🤖</span>
+              </div>
+              <h3 className="text-2xl font-bold mb-4" style={{ color: '#831843' }}>AI Companion</h3>
+              <p style={{ color: '#9f1239' }}>Your personal trading assistant that understands your goals and risk tolerance.</p>
+            </motion.div>
+
+            <motion.div
+              className="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center"
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              viewport={{ once: true }}
+            >
+              <div className="w-16 h-16 bg-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <span className="text-2xl">🚀</span>
+              </div>
+              <h3 className="text-2xl font-bold mb-4" style={{ color: '#831843' }}>Portfolio Optimization</h3>
+              <p style={{ color: '#9f1239' }}>Automatically optimize your portfolio based on market conditions and your preferences.</p>
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>

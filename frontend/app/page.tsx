@@ -818,10 +818,10 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50"
+              className="fixed inset-0 z-50 flex items-center justify-center p-8"
               onClick={() => setShowLandingPage(false)}
             >
-              <div onClick={(e) => e.stopPropagation()}>
+              <div className="relative w-full max-w-6xl h-[80vh] overflow-y-auto overflow-x-hidden rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <LandingPage onEnter={() => setShowLandingPage(false)} />
               </div>
             </motion.div>
