@@ -52,7 +52,7 @@ class TriggerMonitorWorker:
     async def start(self):
         """Start the worker loop"""
         self.is_running = True
-        logger.info("🚀Trigger Monitor Worker started (interval: 1s)")
+        logger.info("🚀 Trigger Monitor Worker started (interval: 1s)")
         
         while self.is_running:
             try:
@@ -60,7 +60,7 @@ class TriggerMonitorWorker:
             except Exception as e:
                 logger.error(f"❌ Monitor cycle failed: {e}", exc_info=True)
             
-            # Wait 1 second before next cycle
+            # Wait 10 seconds before next cycle
             await asyncio.sleep(self.interval_seconds)
     
     async def stop(self):

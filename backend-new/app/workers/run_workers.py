@@ -7,7 +7,7 @@ Usage:
 
 This will start:
 1. Data Ingest Worker (every 10 seconds)
-2. Trigger Monitor Worker (every 1 second)
+2. Trigger Monitor Worker (every 10 seconds)
 """
 import asyncio
 import logging
