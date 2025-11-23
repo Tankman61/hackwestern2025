@@ -249,9 +249,6 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
               const newAction = mixer.clipAction(clipToPlay, vrm.scene);
               console.log('🎬 Created animation action, playing now...');
 
-            // Create action on the VRM scene explicitly
-            const newAction = mixer.clipAction(clipToPlay, vrm.scene);
-
             // Smooth crossfade: fade out old, fade in new
             if (currentActionRef.current) {
               // Fade out current action over 1 second
