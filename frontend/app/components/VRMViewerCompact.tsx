@@ -151,105 +151,112 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
     return () => clearInterval(intervalId);
   }, [viewMode]);
 
-  // NUCLEAR ANTI-T-POSE SYSTEM - PREVENTS ANY T-POSE AT ALL COSTS
+  // CHARACTER RESET SYSTEM - COMPLETE RELOAD ON T-POSE DETECTION
+  const resetCharacter = useCallback(() => {
+    console.log('🔄 CHARACTER RESET: Starting complete character reload...');
+
+    // CLEAR EVERYTHING
+    if (mixerRef.current) {
+      mixerRef.current.stopAllAction();
+      mixerRef.current._actions = [];
+    }
+    currentActionRef.current = null;
+    breathingActionRef.current = null;
+
+    // CLEAR SCENE
+    if (sceneRef.current && vrmRef.current) {
+      sceneRef.current.remove(vrmRef.current.scene);
+    }
+    vrmRef.current = null;
+
+    // FORCE GARBAGE COLLECTION
+    if (typeof window !== 'undefined' && window.gc) {
+      window.gc();
+    }
+
+    // RELOAD CHARACTER AFTER SHORT DELAY
+    setTimeout(() => {
+      console.log('🔄 CHARACTER RESET: Reloading VRM model...');
+
+      // Re-trigger VRM loading by changing the key (this will cause re-mount)
+      const container = containerRef.current;
+      if (container) {
+        // Clear container completely
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
+
+        // Force re-initialization by setting a new key
+        setForceReload(prev => prev + 1);
+      }
+    }, 100);
+  }, []);
+
+  // T-POSE DETECTION WITH CHARACTER RESET
   useEffect(() => {
     let frameCount = 0;
-    let lastTposeTime = 0;
-    let panicMode = false;
+    let tposeStartTime = 0;
+    let isResetting = false;
 
-    const nuclearAnimationForce = () => {
+    const detectAndResetOnTpose = () => {
       frameCount++;
 
-      if (!vrmRef.current || !mixerRef.current) return;
+      if (!vrmRef.current || !mixerRef.current || viewMode !== 'dashboard' || isResetting) return;
 
-      if (viewMode === 'dashboard') {
-        // MULTIPLE DETECTION METHODS - NO ESCAPE
-        const mixerActions = mixerRef.current._actions || [];
-        const hasMixerActions = mixerActions.length > 0;
-        const hasCurrentAction = currentActionRef.current && !currentActionRef.current.paused;
-        const isMixerRunning = !mixerRef.current.timeScale || mixerRef.current.timeScale > 0;
+      // MULTIPLE T-POSE DETECTION METHODS
+      const mixerActions = mixerRef.current._actions || [];
+      const hasMixerActions = mixerActions.length > 0;
+      const hasCurrentAction = currentActionRef.current && !currentActionRef.current.paused;
+      const isMixerRunning = mixerRef.current.timeScale !== 0;
 
-        // ANY SIGN OF T-POSE = IMMEDIATE NUCLEAR RESPONSE
-        const isTposing = !hasMixerActions || !hasCurrentAction || !isMixerRunning;
+      // T-POSE = NO ANIMATIONS RUNNING
+      const isTposing = !hasMixerActions && !hasCurrentAction;
 
-        if (isTposing) {
-          const now = Date.now();
-          const timeSinceLastTpose = now - lastTposeTime;
-
-          // ENTER PANIC MODE after repeated T-posing
-          if (timeSinceLastTpose < 2000) {
-            panicMode = true;
-          }
-          lastTposeTime = now;
-
-          if (frameCount % 30 === 0 || panicMode) { // Log every half second or in panic mode
-            console.log(`🚨 NUCLEAR FORCE: T-POSE DETECTED! Actions: ${mixerActions.length}, Current: ${!!currentActionRef.current}, Mixer: ${isMixerRunning}, PANIC: ${panicMode}`);
-          }
-
-          // NUCLEAR CLEANUP
-          mixerRef.current.stopAllAction();
-          mixerRef.current.timeScale = 1.0; // Ensure mixer is running
-          currentActionRef.current = null;
-
-          // FORCE BREATHING ANIMATION - NO QUESTIONS ASKED
-          const breathingAction = breathingActionRef.current || createBreathingAnimation();
-          if (breathingAction) {
-            breathingAction.reset();
-            breathingAction.play();
-            breathingAction.setEffectiveWeight(1.0);
-            breathingAction.setLoop(THREE.LoopRepeat, Infinity);
-            currentActionRef.current = breathingAction;
-            breathingActionRef.current = breathingAction;
-
-            // FORCE MIXER UPDATE MULTIPLE TIMES
-            mixerRef.current.update(0.016);
-            mixerRef.current.update(0.016);
-            mixerRef.current.update(0.016);
-          }
-
-          // PANIC MODE: CREATE ADDITIONAL BACKUP ANIMATION
-          if (panicMode && frameCount % 10 === 0) { // Every 10 frames in panic mode
-            const backupAction = createBreathingAnimation();
-            if (backupAction && backupAction !== breathingActionRef.current) {
-              backupAction.reset();
-              backupAction.play();
-              backupAction.setEffectiveWeight(0.5); // Layered animation
-            }
-          }
-        } else {
-          // EXIT PANIC MODE when animation is stable
-          if (panicMode && frameCount % 300 === 0) { // Check every 5 seconds
-            panicMode = false;
-            console.log('✅ NUCLEAR FORCE: Animation stable, exiting panic mode');
-          }
+      if (isTposing) {
+        if (tposeStartTime === 0) {
+          tposeStartTime = Date.now();
         }
+
+        const tposeDuration = Date.now() - tposeStartTime;
+
+        // RESET CHARACTER AFTER 1 SECOND OF T-POSE
+        if (tposeDuration >= 1000 && frameCount % 60 === 0) { // Log every second
+          console.log(`🚨 T-POSE DETECTED FOR ${Math.round(tposeDuration/1000)}s - RESETTING CHARACTER!`);
+          isResetting = true;
+
+          resetCharacter();
+
+          // Reset detection after reset
+          setTimeout(() => {
+            tposeStartTime = 0;
+            isResetting = false;
+            console.log('✅ CHARACTER RESET COMPLETE - Animation monitoring resumed');
+          }, 2000);
+        }
+      } else {
+        // Reset detection timer when animation is playing
+        tposeStartTime = 0;
       }
     };
 
-    // RUN EVERY FRAME - NO MERCY
+    // RUN EVERY FRAME
     let animationId: number;
     const animate = () => {
-      nuclearAnimationForce();
+      detectAndResetOnTpose();
       animationId = requestAnimationFrame(animate);
     };
 
     animate();
 
-    // FORCE ANIMATION ON WINDOW EVENTS
-    const forceOnEvents = () => nuclearAnimationForce();
-    window.addEventListener('focus', forceOnEvents);
-    window.addEventListener('resize', forceOnEvents);
-    window.addEventListener('visibilitychange', forceOnEvents);
-
     return () => {
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
-      window.removeEventListener('focus', forceOnEvents);
-      window.removeEventListener('resize', forceOnEvents);
-      window.removeEventListener('visibilitychange', forceOnEvents);
     };
-  }, [modelPath, viewMode, createBreathingAnimation]);
+  }, [viewMode, resetCharacter]);
+
+  // FORCE STATE TO TRIGGER RELOAD
+  const [forceReload, setForceReload] = useState(0);
 
   // Blinking function using sine wave
   const updateBlinking = useCallback(() => {
@@ -1085,7 +1092,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         }
       }
     };
-  }, [modelPath]);
+  }, [modelPath, forceReload]);
 
   // Start idle chain when VRM loads or category is cleared (only for dashboard mode)
   useEffect(() => {
