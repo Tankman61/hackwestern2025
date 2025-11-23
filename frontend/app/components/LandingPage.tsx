@@ -73,13 +73,13 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
 
   return (
     <div
-      className="min-h-[200vh] w-full bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300 overflow-x-hidden"
+      className="fixed inset-0 w-full h-full bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300"
       style={{
         background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 25%, #f9a8d4 50%, #f472b6 75%, #ec4899 100%)',
       }}
     >
-      {/* Hero Section */}
-      <div ref={heroRef} className="relative h-screen flex flex-col items-center justify-center">
+      {/* Hero Section - Full Screen */}
+      <div ref={heroRef} className="relative w-full h-full flex flex-col items-center justify-center">
         {/* Text Content - Center */}
         <div ref={titleRef} className="z-20 flex flex-col items-center justify-center text-center px-8 mb-16">
           <motion.h1

@@ -802,32 +802,12 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Landing Page Modal */}
-      <AnimatePresence>
-        {showLandingPage && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50"
-              style={{ background: 'rgba(0,0,0,0.9)' }}
-              onClick={() => setShowLandingPage(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50"
-              onClick={() => setShowLandingPage(false)}
-            >
-              <div className="relative w-full h-full overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>
-                <LandingPage onEnter={() => setShowLandingPage(false)} />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Full-Screen Landing Page */}
+      {showLandingPage && (
+        <div className="fixed inset-0 z-50">
+          <LandingPage onEnter={() => setShowLandingPage(false)} />
+        </div>
+      )}
 
       {/* Settings Modal */}
       <AnimatePresence>

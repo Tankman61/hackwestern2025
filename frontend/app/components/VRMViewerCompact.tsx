@@ -449,13 +449,10 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
 
       // Different setup based on view mode
       if (viewMode === 'landing') {
-        // Get container dimensions for proper sizing
-        const containerWidth = container.clientWidth || window.innerWidth;
-        const containerHeight = container.clientHeight || window.innerHeight;
-
+        // Full-screen setup for landing page
         camera = new THREE.PerspectiveCamera(
           45,
-          containerWidth / containerHeight,
+          window.innerWidth / window.innerHeight,
           0.1,
           1000
         );
@@ -464,7 +461,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(containerWidth, containerHeight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.domElement.style.background = 'transparent';
         renderer.domElement.style.border = 'none';
         renderer.domElement.style.margin = '0';
@@ -617,12 +614,19 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         if (!mounted) return;
         if (!container) return;
 
-        // Use container dimensions for both modes since landing page is now in modal
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
+        if (viewMode === 'landing') {
+          // Full-screen resize for landing page
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        } else {
+          // Container-based resize for dashboard
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height);
+        }
       }
 
       window.addEventListener("resize", onResize);
