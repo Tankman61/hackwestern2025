@@ -35,7 +35,7 @@ async def test_polymarket():
         markets = await client.fetch_btc_markets()
         print(f"✅ Polymarket: Fetched {len(markets)} markets")
         if markets:
-            print(f"   Example: {markets[0]['title'][:60]}... ({int(markets[0]['odds']*100)}%)")
+            print(f"   Example: {markets}")
         return True
     except Exception as e:
         print(f"❌ Polymarket failed: {e}")
