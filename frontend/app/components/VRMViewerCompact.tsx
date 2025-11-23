@@ -550,24 +550,6 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
             // Rotate model to face camera
             VRMUtils.rotateVRM0(vrm);
 
-            // Calculate and normalize model height for consistency
-            const bbox = new THREE.Box3().setFromObject(vrm.scene);
-            const currentHeight = bbox.max.y - bbox.min.y;
-            const targetHeight = 1.8; // Target height for all models in meters
-            let scaleFactor = targetHeight / currentHeight;
-
-            // Clamp scale factor to reasonable bounds to prevent extreme scaling
-            scaleFactor = Math.max(0.1, Math.min(5.0, scaleFactor));
-
-            // Apply uniform scaling to normalize height
-            vrm.scene.scale.setScalar(scaleFactor);
-
-            console.log(`📏 VRM ${modelPath} height normalized: ${currentHeight.toFixed(3)}m → ${targetHeight}m (scale: ${scaleFactor.toFixed(3)})`);
-
-            // Store the original height for reference
-            (vrm as any).originalHeight = currentHeight;
-            (vrm as any).normalizedScale = scaleFactor;
-
             // Center the model
             vrm.scene.position.set(0, 0, 0);
             scene.add(vrm.scene);
