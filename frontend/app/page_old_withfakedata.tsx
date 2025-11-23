@@ -338,7 +338,7 @@ export default function Home() {
             {/* VTuber Profile Card - SQUARE SECTION */}
             <div
               className="border-r cursor-pointer flex items-center justify-center"
-              style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
+              style={{ background: 'transparent', borderColor: 'transparent', width: '256px', height: '256px' }}
               onClick={() => setAgentExpanded(!agentExpanded)}
             >
               <div className="w-[200px] h-[200px] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
@@ -534,7 +534,7 @@ export default function Home() {
 
         {/* TRADING PANEL - Always shows icons on right, expands left */}
         {tradingPanelOpen && (
-          <div className="relative flex flex-col h-full border-r" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+          <div className="relative flex flex-col h-full border-r" style={{ background: 'rgb(0,0,0,0)', borderColor: 'rgb(0,0,0,0)' }}>
             {/* Tab Content Based on Active Tab */}
             {activeTradingTab === "risk" && (
               <div className="absolute inset-0 flex flex-col">
