@@ -70,7 +70,7 @@ export default function Home() {
   const [loadingReddit, setLoadingReddit] = useState(true);
   const [loadingSentiment, setLoadingSentiment] = useState(true);
 
-  // Handle WebSocket messages for live BTC price
+  // Handle WebSocket messages for live BTC price and alerts
   const handlePriceMessage = (message: AlpacaMessage) => {
     if (message.type === "bar" && message.data) {
       const barData = message.data;
@@ -102,6 +102,42 @@ export default function Home() {
           );
         }
       }
+    } else if (message.type === "ANOMALY_ALERT") {
+      // Handle anomaly alert - display in chat
+      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const alertMessage = `🚨 ${message.message}`;
+      
+      // Add to chat messages
+      setMessages(prev => [...prev, { 
+        role: "agent", 
+        text: alertMessage, 
+        time: timestamp 
+      }]);
+      
+      // Log to console for debugging
+      console.warn("🚨 ANOMALY ALERT:", message);
+      
+      // Open agent chat if not already open
+      if (!agentExpanded) {
+        setAgentExpanded(true);
+      }
+    } else if (message.type === "INTERRUPT") {
+      // Handle interrupt - display prominently
+      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const interruptMessage = `⚠️ INTERRUPT: ${message.message}`;
+      
+      // Add to chat messages
+      setMessages(prev => [...prev, { 
+        role: "agent", 
+        text: interruptMessage, 
+        time: timestamp 
+      }]);
+      
+      // Log to console
+      console.error("⚠️ INTERRUPT:", message);
+      
+      // Open agent chat
+      setAgentExpanded(true);
     }
   };
 

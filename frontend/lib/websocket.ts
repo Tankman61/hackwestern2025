@@ -39,6 +39,16 @@ export interface AlpacaOrderUpdate {
   side: string;
 }
 
+export interface AnomalyAlert {
+  metric: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  anomaly_type: string;
+  context?: string;
+  source?: string;
+  symbol?: string;
+}
+
 export type AlpacaMessage = 
   | { type: 'bar'; data: AlpacaBar }
   | { type: 'trade'; data: AlpacaTrade }
@@ -46,7 +56,9 @@ export type AlpacaMessage =
   | { type: 'order_update'; data: AlpacaOrderUpdate }
   | { type: 'error'; message: string }
   | { type: 'connected'; message: string }
-  | { type: 'subscribed'; symbols: string[] };
+  | { type: 'subscribed'; symbols: string[] }
+  | { type: 'ANOMALY_ALERT'; message: string; anomalies: AnomalyAlert[]; count: number; timestamp: string }
+  | { type: 'INTERRUPT'; message: string; [key: string]: any };
 
 type MessageHandler = (message: AlpacaMessage) => void;
 
