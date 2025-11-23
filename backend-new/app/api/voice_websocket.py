@@ -11,6 +11,7 @@ from typing import Dict, Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.services.elevenlabs_service import elevenlabs_service
+from app.services.voice_session_manager import register_session, unregister_session
 from app.agent.graph import agent_graph
 
 router = APIRouter()
@@ -232,6 +233,107 @@ class VoiceSession:
                 "is_thinking": False
             })
 
+    async def process_system_alert(self, alert_text: str, alert_context: dict):
+        """Process a system alert through the agent and speak the response"""
+        try:
+            logger.info(f"🚨 Processing system alert via agent: {alert_text}")
+
+            await self.send_message({
+                "type": "agent_thinking",
+                "is_thinking": True
+            })
+
+            config = {"configurable": {"thread_id": self.thread_id}}
+            messages = []
+
+            # Build comprehensive SYSTEM ALERT context
+            risk_score = alert_context.get('risk_score', 0)
+            hype_score = alert_context.get('hype_score', 0)
+            btc_price = alert_context.get('btc_price', 0)
+            price_change = alert_context.get('price_change_24h', 0)
+
+            # Determine if this is BEAR or MOON case
+            is_bear = risk_score >= 80 or price_change <= -5.0
+            is_moon = hype_score >= 90 or price_change >= 5.0
+
+            context_lines = [
+                f"URGENT SYSTEM ALERT:",
+                f"Type: {alert_context.get('alert_type', 'ALERT')}",
+                f"Risk Score: {risk_score}/100",
+                f"Hype Score: {hype_score}/100",
+                f"BTC Price: ${btc_price:,.2f}",
+                f"24h Change: {price_change:+.2f}%",
+                "",
+            ]
+
+            if is_bear:
+                context_lines.append("🐻 BEAR CASE DETECTED - Price crash/high risk!")
+                context_lines.append("According to your EMERGENCY PROTOCOLS, you must:")
+                context_lines.append("1. SCREAM about the crash using the alert data")
+                context_lines.append("2. Call list_holdings() to check BTC positions")
+                context_lines.append("3. Call execute_trade() to SELL 50-80% of BTC")
+                context_lines.append("4. Call lock_user_account() to prevent panic buying")
+                context_lines.append("5. Explain what you did")
+            elif is_moon:
+                context_lines.append("🚀 MOON CASE DETECTED - Price pump/high hype!")
+                context_lines.append("According to your EMERGENCY PROTOCOLS, you must:")
+                context_lines.append("1. SCREAM with EXCITEMENT using the alert data")
+                context_lines.append("2. Call list_holdings() to check cash balance")
+                context_lines.append("3. Call execute_trade() to BUY with 10-20% of cash")
+                context_lines.append("4. DO NOT lock account")
+                context_lines.append("5. Explain what you did")
+            else:
+                context_lines.append("Market alert - assess and respond appropriately")
+
+            context_str = "\n".join(context_lines)
+
+            system_prompt = f"{alert_text}\n\n{context_str}\n\nTake action NOW according to your emergency protocols!"
+            messages.append(SystemMessage(content=system_prompt))
+
+            # Instead of asking for acknowledgment, trigger ACTION
+            if is_bear:
+                messages.append(HumanMessage(content="The market is crashing! Take protective action immediately!"))
+            elif is_moon:
+                messages.append(HumanMessage(content="Bitcoin is mooning! Catch this momentum NOW!"))
+            else:
+                messages.append(HumanMessage(content="What's happening with the market?"))
+
+            agent_response_text = ""
+            async for event in agent_graph.astream(
+                {"messages": messages},
+                config=config,
+                stream_mode="values"
+            ):
+                if "messages" in event and event["messages"]:
+                    last_msg = event["messages"][-1]
+                    if hasattr(last_msg, "content") and last_msg.content:
+                        if not hasattr(last_msg, "tool_calls") or not last_msg.tool_calls:
+                            agent_response_text = last_msg.content
+
+            if agent_response_text:
+                await self.send_message({
+                    "type": "agent_text",
+                    "text": agent_response_text
+                })
+                self.tts_task = asyncio.create_task(self.speak_response(agent_response_text))
+                try:
+                    await self.tts_task
+                except asyncio.CancelledError:
+                    logger.info("TTS task was cancelled")
+
+            await self.send_message({
+                "type": "agent_thinking",
+                "is_thinking": False
+            })
+
+        except Exception as e:
+            logger.error(f"Error processing system alert: {e}")
+            await self.send_error(f"Agent error: {str(e)}")
+            await self.send_message({
+                "type": "agent_thinking",
+                "is_thinking": False
+            })
+
     async def speak_response(self, text: str):
         """Convert agent response to speech and stream to frontend"""
         tts = None
@@ -398,6 +500,9 @@ async def voice_agent_websocket(websocket: WebSocket):
         # Send ready signal
         await websocket.send_json({"type": "ready"})
 
+        # Register session for system alerts (single-user MVP)
+        register_session(session)
+
         # Main message loop
         while True:
             data = await websocket.receive_json()
@@ -438,6 +543,7 @@ async def voice_agent_websocket(websocket: WebSocket):
 
     finally:
         # Cleanup
+        unregister_session(session)
         if stt_task:
             stt_task.cancel()
             try:

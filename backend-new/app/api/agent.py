@@ -1,6 +1,11 @@
 """
 Agent API - Chat endpoint for LangGraph agent
 Allows direct injection of system alerts and user messages
+
+NOTE (single-user voice-first MVP):
+- Anomaly alerts should go through the live voice WebSocket session and TTS.
+- Keep this HTTP endpoint around for text-only calls or UI hooks (e.g., voice-test),
+  but voice alerts should use the voice session manager instead.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel

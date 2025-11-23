@@ -607,42 +607,20 @@ async def get_btc_data() -> Dict[str, any]:
     import httpx
     import os
 
-    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    # Prefer live price directly from Finnhub service to avoid HTTP dependency
+    btc_price = finnhub_service.get_price("BTC") or finnhub_service.get_price("BTCUSD")
+    if btc_price is None:
+        logger.error("❌ BTC price not available from Finnhub live cache. Is Finnhub WebSocket connected and subscribed?")
+        raise ValueError("BTC price not available from Finnhub.")
 
-    # Call FastAPI server to get price (same pattern as agent tool)
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{API_BASE_URL}/api/prices/BTC",
-                timeout=5.0
-            )
+    logger.info(f"✅ Got BTC price from Finnhub service: ${btc_price:,.2f}")
 
-            if response.status_code == 404:
-                logger.error("❌ BTC price not available from Finnhub. Is FastAPI server running with Finnhub WebSocket connected?")
-                raise ValueError("BTC price not available from Finnhub. FastAPI server might not be running or Finnhub WebSocket is not connected.")
-
-            response.raise_for_status()
-            data = response.json()
-
-            btc_price = data.get("price")
-            if btc_price is None:
-                raise ValueError("No price data in response from FastAPI")
-
-            logger.info(f"✅ Got BTC price from FastAPI: ${btc_price:,.2f}")
-
-            # For MVP: Return live price with estimated 24h values
-            # TODO: Track historical data to calculate real 24h change, high, low, volume
-            return {
-                "btc_price": round(btc_price, 2),
-                "price_change_24h": 0.0,  # TODO: Calculate from historical data
-                "volume_24h": "$0",  # TODO: Aggregate from trade volumes
-                "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
-                "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
-            }
-
-    except httpx.HTTPError as e:
-        logger.error(f"❌ Failed to fetch BTC price from FastAPI: {e}")
-        raise ValueError(f"Failed to fetch BTC price from FastAPI server: {e}")
-    except Exception as e:
-        logger.error(f"❌ Unexpected error fetching BTC price: {e}")
-        raise ValueError(f"Unexpected error: {e}")
+    # For MVP: Return live price with estimated 24h values
+    # TODO: Track historical data to calculate real 24h change, high, low, volume
+    return {
+        "btc_price": round(btc_price, 2),
+        "price_change_24h": 0.0,  # TODO: Calculate from historical data
+        "volume_24h": "$0",  # TODO: Aggregate from trade volumes
+        "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
+        "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
+    }
