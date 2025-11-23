@@ -178,6 +178,16 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
   ];
   const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
 
+  // Debug: Log when character changes
+  useEffect(() => {
+    console.log('🎭 Current character updated to:', selectedCharacter.name, selectedCharacter.vrm);
+  }, [selectedCharacter]);
+
+  // Debug: Log when modal state changes
+  useEffect(() => {
+    console.log('🎭 characterSwapperOpen state changed to:', characterSwapperOpen);
+  }, [characterSwapperOpen]);
+
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
   const [sentimentStats, setSentimentStats] = useState<SentimentStats | null>(null);
@@ -1107,6 +1117,7 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      console.log('🎭 Character swap button clicked!');
                       setCharacterSwapperOpen(true);
                     }}
                     className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
@@ -1356,12 +1367,24 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
     }
 
   return (
+    <>
     <div className="h-full w-full overflow-y-auto" style={{ background: 'var(--slate-1)' }}>
       {/* Header */}
       <div className="border-b px-6 py-4" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-        <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
-          Crypto Holdings
-        </Text>
+        <Flex justify="between" align="center">
+          <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
+            Crypto Holdings {characterSwapperOpen && <span style={{ color: 'red', marginLeft: '10px' }}>🎭 MODAL SHOULD BE OPEN</span>}
+          </Text>
+          <Button
+            onClick={() => {
+              console.log('🧪 TEST BUTTON: Setting characterSwapperOpen to TRUE');
+              setCharacterSwapperOpen(true);
+            }}
+            style={{ background: 'var(--blue-9)', color: 'white', cursor: 'pointer' }}
+          >
+            🧪 TEST: Open Modal
+          </Button>
+        </Flex>
       </div>
 
       {/* Add New Holding Form */}
@@ -1461,16 +1484,37 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
           </div>
         </div>
       </div>
+    </div>
 
-      {/* Character Swapper Modal */}
-      <AnimatePresence>
-        {characterSwapperOpen && (
+    {/* Character Swapper Modal - Outside scrollable container */}
+    {characterSwapperOpen && (
+      <div
+        className="fixed inset-0"
+        style={{
+          background: 'red',
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '48px',
+          color: 'white',
+          fontWeight: 'bold'
+        }}
+        onClick={() => setCharacterSwapperOpen(false)}
+      >
+        MODAL IS OPEN - CLICK TO CLOSE
+      </div>
+    )}
+
+    {/* Original Modal (commented for testing) */}
+    <AnimatePresence>
+        {false && characterSwapperOpen && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50"
+              className="fixed inset-0 z-[9999]"
               style={{ background: 'rgba(0,0,0,0.9)' }}
               onClick={() => setCharacterSwapperOpen(false)}
             />
@@ -1479,7 +1523,7 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-8"
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-8"
               onClick={() => setCharacterSwapperOpen(false)}
             >
               <div
@@ -1515,8 +1559,10 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
                         key={character.id}
                         className="cursor-pointer"
                         onClick={() => {
+                          console.log('🎭 Selecting character:', character.name, character.vrm);
                           setSelectedCharacter(character);
                           setCharacterSwapperOpen(false);
+                          console.log('🎭 Character swap complete!');
                         }}
                       >
                         <motion.div
@@ -1564,6 +1610,6 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
           </>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }

@@ -362,14 +362,14 @@ export default function Home() {
             )}
           </div>
 
-          {/* Bottom Data Panels - REMOVED - taking up too much space */}
-          {false && (
+          {/* Bottom Data Panels */}
+          <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
             <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
                 {/* VTuber Profile Card */}
                 <div
                   className="shrink-0 border-r cursor-pointer flex items-center justify-center"
                   style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '16rem', height: '16rem' }}
-                  onClick={() => setAgentExpanded(!agentExpanded)}
+                  onClick={() => setCharacterSwapperOpen(true)}
                 >
                   <div className="w-[12.5rem] h-[12.5rem] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
@@ -517,7 +517,6 @@ export default function Home() {
                   )}
                 </div>
             </div>
-          )}
         </div>
 
         {/* TRADING PANEL - Using Component */}
