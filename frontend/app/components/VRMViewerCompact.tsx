@@ -342,6 +342,10 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.domElement.style.background = 'transparent';
+        renderer.domElement.style.border = 'none';
+        renderer.domElement.style.margin = '0';
+        renderer.domElement.style.padding = '0';
         container.appendChild(renderer.domElement);
 
         // Use horse girl as default for landing page if no specific model provided
@@ -372,6 +376,10 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
+        renderer.domElement.style.background = 'transparent';
+        renderer.domElement.style.border = 'none';
+        renderer.domElement.style.margin = '0';
+        renderer.domElement.style.padding = '0';
         container.appendChild(renderer.domElement);
       }
 
@@ -708,21 +716,32 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
 
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div style={{
+      width: "100%",
+      height: "100%",
+      position: "relative",
+      background: "rgba(0,0,0,0)",
+      border: "none",
+      margin: 0,
+      padding: 0,
+      outline: "none"
+    }}>
       <div
         ref={containerRef}
         onClick={onSceneClick}
         style={{
           width: "100%",
           height: "100%",
-          minHeight: "400px",
+          minHeight: "100%",
           overflow: "hidden",
-          background: "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          background: "rgba(0,0,0,0)",
+          border: "none",
+          margin: 0,
+          padding: 0,
+          display: "block",
           position: "relative",
-          cursor: onSceneClick ? "pointer" : "default"
+          cursor: onSceneClick ? "pointer" : "default",
+          outline: "none"
         }}
       />
 
