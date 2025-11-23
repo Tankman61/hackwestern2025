@@ -376,7 +376,7 @@ export default function TradingTab({
       <div className="shrink-0 border-t" style={{
         borderColor: 'var(--slate-6)',
         flexShrink: 0,
-        background: 'var(--slate-3)',
+        background: 'var(--slate-2)',
         padding: '0.75rem',
         paddingBottom: '1rem'
       }}>
