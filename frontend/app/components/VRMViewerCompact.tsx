@@ -48,10 +48,16 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   // Initialize lip sync hook
   useWawa({ vrm: vrmRef.current, audioElem: audioRef.current } as any);
 
-  // FORCE MIXER UPDATE EVERY FRAME
+  // FORCE MIXER UPDATE EVERY FRAME + MIXER PROTECTION
   useEffect(() => {
     const updateMixer = () => {
       if (mixerRef.current) {
+        // PROTECT MIXER FROM BEING PAUSED/STOPPED
+        if (mixerRef.current.timeScale === 0 || mixerRef.current.timeScale < 0) {
+          console.log('🛡️ MIXER PROTECTION: Mixer was paused, forcing resume');
+          mixerRef.current.timeScale = 1.0;
+        }
+
         // Force mixer update every frame
         mixerRef.current.update(0.016); // 60fps
       }
@@ -112,67 +118,136 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
       if (breathingAction) {
         breathingActionRef.current = breathingAction;
         console.log('💨 Breathing animation pre-created and cached');
+
+        // IMMEDIATE START - NEVER STOP
+        breathingAction.reset();
+        breathingAction.play();
+        breathingAction.setLoop(THREE.LoopRepeat, Infinity);
+        breathingAction.setEffectiveWeight(0.1); // Subtle but always there
+        currentActionRef.current = breathingAction;
       }
     }
   }, [createBreathingAnimation]);
 
-  // FORCE ANIMATION PLAYBACK - MONITOR MIXER DIRECTLY
+  // PERMANENT ANIMATION LOOP - NEVER STOPS
+  useEffect(() => {
+    const permanentAnimationLoop = () => {
+      if (mixerRef.current && vrmRef.current && viewMode === 'dashboard') {
+        // ALWAYS ENSURE AT LEAST ONE ANIMATION IS PLAYING
+        const hasAnyAction = mixerRef.current._actions && mixerRef.current._actions.length > 0;
+
+        if (!hasAnyAction && breathingActionRef.current) {
+          console.log('🔄 PERMANENT LOOP: Forcing breathing animation');
+          breathingActionRef.current.reset();
+          breathingActionRef.current.play();
+          currentActionRef.current = breathingActionRef.current;
+        }
+      }
+    };
+
+    // Run every 100ms - CONSTANT MONITORING
+    const intervalId = setInterval(permanentAnimationLoop, 100);
+
+    return () => clearInterval(intervalId);
+  }, [viewMode]);
+
+  // NUCLEAR ANTI-T-POSE SYSTEM - PREVENTS ANY T-POSE AT ALL COSTS
   useEffect(() => {
     let frameCount = 0;
+    let lastTposeTime = 0;
+    let panicMode = false;
 
-    const forceAnimationPlayback = () => {
+    const nuclearAnimationForce = () => {
       frameCount++;
 
       if (!vrmRef.current || !mixerRef.current) return;
 
       if (viewMode === 'dashboard') {
-        // Check mixer directly - has any active actions?
-        const hasAnyAnimation = mixerRef.current._actions && mixerRef.current._actions.length > 0;
+        // MULTIPLE DETECTION METHODS - NO ESCAPE
+        const mixerActions = mixerRef.current._actions || [];
+        const hasMixerActions = mixerActions.length > 0;
+        const hasCurrentAction = currentActionRef.current && !currentActionRef.current.paused;
+        const isMixerRunning = !mixerRef.current.timeScale || mixerRef.current.timeScale > 0;
 
-        // FORCE ANIMATION IF NOTHING IS PLAYING
-        if (!hasAnyAnimation) {
-          if (frameCount % 60 === 0) {
-            console.log('🚨 FORCE MODE: No animation detected, forcing playback...');
+        // ANY SIGN OF T-POSE = IMMEDIATE NUCLEAR RESPONSE
+        const isTposing = !hasMixerActions || !hasCurrentAction || !isMixerRunning;
+
+        if (isTposing) {
+          const now = Date.now();
+          const timeSinceLastTpose = now - lastTposeTime;
+
+          // ENTER PANIC MODE after repeated T-posing
+          if (timeSinceLastTpose < 2000) {
+            panicMode = true;
+          }
+          lastTposeTime = now;
+
+          if (frameCount % 30 === 0 || panicMode) { // Log every half second or in panic mode
+            console.log(`🚨 NUCLEAR FORCE: T-POSE DETECTED! Actions: ${mixerActions.length}, Current: ${!!currentActionRef.current}, Mixer: ${isMixerRunning}, PANIC: ${panicMode}`);
           }
 
-          // Clear everything
+          // NUCLEAR CLEANUP
           mixerRef.current.stopAllAction();
+          mixerRef.current.timeScale = 1.0; // Ensure mixer is running
+          currentActionRef.current = null;
 
-          // Use cached breathing animation if available
-          if (breathingActionRef.current) {
-            breathingActionRef.current.reset();
-            breathingActionRef.current.play();
-            currentActionRef.current = breathingActionRef.current;
-          } else {
-            // Create new one if cache failed
-            const emergencyAction = createBreathingAnimation();
-            if (emergencyAction) {
-              emergencyAction.reset();
-              emergencyAction.play();
-              currentActionRef.current = emergencyAction;
-              breathingActionRef.current = emergencyAction; // Cache it
+          // FORCE BREATHING ANIMATION - NO QUESTIONS ASKED
+          const breathingAction = breathingActionRef.current || createBreathingAnimation();
+          if (breathingAction) {
+            breathingAction.reset();
+            breathingAction.play();
+            breathingAction.setEffectiveWeight(1.0);
+            breathingAction.setLoop(THREE.LoopRepeat, Infinity);
+            currentActionRef.current = breathingAction;
+            breathingActionRef.current = breathingAction;
+
+            // FORCE MIXER UPDATE MULTIPLE TIMES
+            mixerRef.current.update(0.016);
+            mixerRef.current.update(0.016);
+            mixerRef.current.update(0.016);
+          }
+
+          // PANIC MODE: CREATE ADDITIONAL BACKUP ANIMATION
+          if (panicMode && frameCount % 10 === 0) { // Every 10 frames in panic mode
+            const backupAction = createBreathingAnimation();
+            if (backupAction && backupAction !== breathingActionRef.current) {
+              backupAction.reset();
+              backupAction.play();
+              backupAction.setEffectiveWeight(0.5); // Layered animation
             }
           }
-
-          // Force mixer update
-          mixerRef.current.update(0.016); // One frame worth
+        } else {
+          // EXIT PANIC MODE when animation is stable
+          if (panicMode && frameCount % 300 === 0) { // Check every 5 seconds
+            panicMode = false;
+            console.log('✅ NUCLEAR FORCE: Animation stable, exiting panic mode');
+          }
         }
       }
     };
 
-    // Run on every frame - MAXIMUM AGGRESSION
+    // RUN EVERY FRAME - NO MERCY
     let animationId: number;
     const animate = () => {
-      forceAnimationPlayback();
+      nuclearAnimationForce();
       animationId = requestAnimationFrame(animate);
     };
 
     animate();
 
+    // FORCE ANIMATION ON WINDOW EVENTS
+    const forceOnEvents = () => nuclearAnimationForce();
+    window.addEventListener('focus', forceOnEvents);
+    window.addEventListener('resize', forceOnEvents);
+    window.addEventListener('visibilitychange', forceOnEvents);
+
     return () => {
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
+      window.removeEventListener('focus', forceOnEvents);
+      window.removeEventListener('resize', forceOnEvents);
+      window.removeEventListener('visibilitychange', forceOnEvents);
     };
   }, [modelPath, viewMode, createBreathingAnimation]);
 
