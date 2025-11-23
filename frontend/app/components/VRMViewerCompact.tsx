@@ -50,72 +50,102 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
 
   // Create a basic breathing animation as ultimate fallback
   const createBreathingAnimation = useCallback(() => {
-    if (!vrmRef.current || !mixerRef.current) return null;
+    if (!vrmRef.current || !mixerRef.current) {
+      console.log('❌ Cannot create breathing animation: VRM or mixer not ready');
+      return null;
+    }
 
     try {
-      // Create a simple breathing animation by scaling the chest/hips slightly
-      const vrm = vrmRef.current;
+      // Create a simple breathing animation by rotating the model slightly
       const mixer = mixerRef.current;
 
-      // Create a simple keyframe animation for breathing
-      const breathingClip = new THREE.AnimationClip('breathing', 2, [
-        new THREE.VectorKeyframeTrack('.scale', [0, 1, 2], [1, 1, 1, 1.02, 1.02, 1.02, 1, 1, 1])
+      // Create a simple rotation animation for "breathing" effect
+      const breathingClip = new THREE.AnimationClip('breathing', 3, [
+        new THREE.NumberKeyframeTrack('.rotation[y]', [0, 1.5, 3], [0, 0.02, 0])
       ]);
 
-      const breathingAction = mixer.clipAction(breathingClip);
+      const breathingAction = mixer.clipAction(breathingClip, vrmRef.current.scene);
       breathingAction.setLoop(THREE.LoopRepeat, Infinity);
       breathingAction.enabled = true;
-      breathingAction.setEffectiveTimeScale(0.5); // Slow breathing
-      breathingAction.setEffectiveWeight(0.1); // Very subtle
+      breathingAction.setEffectiveTimeScale(0.3); // Very slow
+      breathingAction.setEffectiveWeight(0.05); // Barely noticeable
 
       console.log('💨 Created breathing fallback animation');
       return breathingAction;
     } catch (error) {
       console.error('Failed to create breathing animation:', error);
-      return null;
+
+      // Try even simpler fallback - just a tiny constant movement
+      try {
+        const mixer = mixerRef.current;
+        const simpleClip = new THREE.AnimationClip('simple', 1, [
+          new THREE.NumberKeyframeTrack('.position[y]', [0, 1], [0, 0.001])
+        ]);
+        const simpleAction = mixer.clipAction(simpleClip, vrmRef.current.scene);
+        simpleAction.setLoop(THREE.LoopRepeat, Infinity);
+        simpleAction.setEffectiveTimeScale(0.1);
+        simpleAction.setEffectiveWeight(0.01);
+        console.log('🔄 Created ultra-simple fallback animation');
+        return simpleAction;
+      } catch (fallbackError) {
+        console.error('Even simple animation failed:', fallbackError);
+        return null;
+      }
     }
   }, []);
 
-  // Monitor animation status for all characters
+  // Monitor animation status for all characters - AGGRESSIVE MODE
   useEffect(() => {
     const checkAnimationStatus = () => {
       if (!vrmRef.current || !mixerRef.current) return;
 
       const hasActiveAnimation = currentActionRef.current && currentActionRef.current.isRunning();
-      const timeSinceInit = Date.now() - (initializedRef.current ? 0 : Date.now());
 
-      // If no animation is running and we've been initialized for more than 5 seconds
-      if (!hasActiveAnimation && timeSinceInit > 5000 && viewMode === 'dashboard') {
-        console.log('🤖 Character detected as T-posing, forcing animation restart...');
+      // If no animation is running, ACT IMMEDIATELY
+      if (!hasActiveAnimation && viewMode === 'dashboard') {
+        console.log('🚨 T-POSE DETECTED! Emergency animation recovery...');
 
-        // Try to restart animation chain first
-        if (!playAnimationChain(getIdleAnimations())) {
-          // If that fails, try breathing animation as last resort
+        // Visual indicator - flash the scene to show recovery is happening
+        if (sceneRef.current) {
+          const originalBg = sceneRef.current.background;
+          sceneRef.current.background = new THREE.Color(0xff0000); // Red flash
           setTimeout(() => {
-            if (!currentActionRef.current || !currentActionRef.current.isRunning()) {
-              console.log('🤖 Using breathing animation as final fallback');
-              const breathingAction = createBreathingAnimation();
-              if (breathingAction) {
-                // Stop any existing actions first
-                mixerRef.current?.stopAllAction();
-                breathingAction.reset();
-                breathingAction.play();
-                currentActionRef.current = breathingAction;
-              }
-            }
-          }, 2000);
+            if (sceneRef.current) sceneRef.current.background = originalBg;
+          }, 200);
+        }
+
+        // Stop everything first
+        mixerRef.current.stopAllAction();
+        currentActionRef.current = null;
+
+        // Try to restart animation chain immediately
+        const animations = getIdleAnimations();
+        if (animations.length > 0) {
+          console.log('🎯 Emergency restart with', animations.length, 'animations');
+          playAnimationChain(animations);
+        } else {
+          // No animations available, force breathing animation NOW
+          console.log('💨 Emergency breathing animation - NO DELAY');
+          const breathingAction = createBreathingAnimation();
+          if (breathingAction) {
+            breathingAction.reset();
+            breathingAction.play();
+            currentActionRef.current = breathingAction;
+          }
         }
       }
     };
 
-    // Check every 8 seconds for any T-posing
-    animationMonitorRef.current = setInterval(checkAnimationStatus, 8000);
+    // Check every 2 seconds (very aggressive)
+    animationMonitorRef.current = setInterval(checkAnimationStatus, 2000);
 
-    // Also check immediately after a short delay
-    const initialCheck = setTimeout(checkAnimationStatus, 3000);
+    // Check immediately and after 0.5 seconds
+    const immediateCheck = setTimeout(checkAnimationStatus, 100);
+    const quickCheck = setTimeout(checkAnimationStatus, 500);
 
     return () => {
-      clearTimeout(initialCheck);
+      clearTimeout(immediateCheck);
+      clearTimeout(quickCheck);
       if (animationMonitorRef.current) {
         clearInterval(animationMonitorRef.current);
         animationMonitorRef.current = null;
@@ -495,41 +525,32 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         },
         undefined,
         (error: any) => {
-          console.error('Failed to load animation:', animation.name, error);
-          const isHorseGirl = modelPath.includes('horse_girl');
-          if (isHorseGirl) {
-            console.log('🐴 Horse Girl animation failed, trying fallback...');
-          } else {
-            console.log('🤖 General animation failed, trying next in chain...');
-          }
+          console.error('❌ Animation load failed:', animation.name, error);
 
-          // Count consecutive failures to detect if all animations are broken
           if (!currentChainRef.current) return;
 
+          // Check if we've tried all animations in the current chain
           const currentIndex = currentChainIndexRef.current % currentChainRef.current.length;
-          const failureCount = (currentChainIndexRef.current - currentIndex) / currentChainRef.current.length;
+          const attemptedAnimations = Math.floor(currentChainIndexRef.current / currentChainRef.current.length) + 1;
 
-          if (failureCount > 2) {
-            console.warn('⚠️ Multiple animation failures detected, switching to emergency fallback');
-            // Force immediate breathing animation as emergency fallback
-            setTimeout(() => {
-              if (!currentActionRef.current || !currentActionRef.current.isRunning()) {
-                const breathingAction = createBreathingAnimation();
-                if (breathingAction) {
-                  mixerRef.current?.stopAllAction();
-                  breathingAction.reset();
-                  breathingAction.play();
-                  currentActionRef.current = breathingAction;
-                }
-              }
-            }, 500);
-            return;
+          // If we've tried all animations at least once, switch to breathing immediately
+          if (attemptedAnimations >= 1 && currentIndex === currentChainRef.current.length - 1) {
+            console.log('🚨 All animations failed, switching to breathing animation NOW');
+            const breathingAction = createBreathingAnimation();
+            if (breathingAction) {
+              mixerRef.current?.stopAllAction();
+              breathingAction.reset();
+              breathingAction.play();
+              currentActionRef.current = breathingAction;
+              return; // Stop the chain
+            }
           }
 
-          // Try next animation after a delay
+          // Try next animation immediately
+          console.log('🔄 Trying next animation...');
           animationChainTimeoutRef.current = setTimeout(() => {
             playNextInChain();
-          }, 1500); // Even faster fallback
+          }, 200); // Faster fallback
         }
       );
     };
