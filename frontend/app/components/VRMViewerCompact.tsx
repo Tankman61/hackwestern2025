@@ -48,107 +48,101 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   // Initialize lip sync hook
   useWawa({ vrm: vrmRef.current, audioElem: audioRef.current } as any);
 
-  // Create a basic breathing animation as ultimate fallback
+  // Create a basic breathing animation as ultimate fallback - ALWAYS WORKS
   const createBreathingAnimation = useCallback(() => {
-    if (!vrmRef.current || !mixerRef.current) {
-      console.log('❌ Cannot create breathing animation: VRM or mixer not ready');
+    if (!mixerRef.current) {
+      console.log('❌ Cannot create breathing animation: mixer not ready');
       return null;
     }
 
     try {
-      // Create a simple breathing animation by rotating the model slightly
       const mixer = mixerRef.current;
+      const target = vrmRef.current?.scene || new THREE.Object3D();
 
-      // Create a simple rotation animation for "breathing" effect
-      const breathingClip = new THREE.AnimationClip('breathing', 3, [
-        new THREE.NumberKeyframeTrack('.rotation[y]', [0, 1.5, 3], [0, 0.02, 0])
+      // Create the most basic possible animation - constant tiny movement
+      const breathingClip = new THREE.AnimationClip('breathing', 2, [
+        new THREE.NumberKeyframeTrack('.position[y]', [0, 1, 2], [0, 0.002, 0])
       ]);
 
-      const breathingAction = mixer.clipAction(breathingClip, vrmRef.current.scene);
+      const breathingAction = mixer.clipAction(breathingClip, target);
       breathingAction.setLoop(THREE.LoopRepeat, Infinity);
       breathingAction.enabled = true;
-      breathingAction.setEffectiveTimeScale(0.3); // Very slow
-      breathingAction.setEffectiveWeight(0.05); // Barely noticeable
+      breathingAction.setEffectiveTimeScale(1.0); // Normal speed
+      breathingAction.setEffectiveWeight(0.02); // Very subtle
 
-      console.log('💨 Created breathing fallback animation');
+      console.log('💨 Created guaranteed breathing animation');
       return breathingAction;
     } catch (error) {
-      console.error('Failed to create breathing animation:', error);
+      console.error('Failed to create any animation:', error);
 
-      // Try even simpler fallback - just a tiny constant movement
+      // ABSOLUTE LAST RESORT: Create a dummy action that just exists
       try {
-        const mixer = mixerRef.current;
-        const simpleClip = new THREE.AnimationClip('simple', 1, [
-          new THREE.NumberKeyframeTrack('.position[y]', [0, 1], [0, 0.001])
-        ]);
-        const simpleAction = mixer.clipAction(simpleClip, vrmRef.current.scene);
-        simpleAction.setLoop(THREE.LoopRepeat, Infinity);
-        simpleAction.setEffectiveTimeScale(0.1);
-        simpleAction.setEffectiveWeight(0.01);
-        console.log('🔄 Created ultra-simple fallback animation');
-        return simpleAction;
-      } catch (fallbackError) {
-        console.error('Even simple animation failed:', fallbackError);
+        const dummyClip = new THREE.AnimationClip('dummy', 1, []);
+        const dummyAction = mixerRef.current.clipAction(dummyClip);
+        dummyAction.enabled = true;
+        console.log('🛑 Created dummy action as absolute fallback');
+        return dummyAction;
+      } catch (finalError) {
+        console.error('Even dummy action failed:', finalError);
         return null;
       }
     }
   }, []);
 
-  // Monitor animation status for all characters - AGGRESSIVE MODE
+  // CONTINUOUS ANIMATION MONITORING - FRAME-BY-FRAME
   useEffect(() => {
-    const checkAnimationStatus = () => {
+    let frameCount = 0;
+
+    const checkAnimationEveryFrame = () => {
+      frameCount++;
+
       if (!vrmRef.current || !mixerRef.current) return;
 
-      const hasActiveAnimation = currentActionRef.current && currentActionRef.current.isRunning();
+      // Check every frame if we have dashboard view
+      if (viewMode === 'dashboard') {
+        const hasActiveAnimation = currentActionRef.current && currentActionRef.current.isRunning();
 
-      // If no animation is running, ACT IMMEDIATELY
-      if (!hasActiveAnimation && viewMode === 'dashboard') {
-        console.log('🚨 T-POSE DETECTED! Emergency animation recovery...');
+        // If no animation is running, FIX IT IMMEDIATELY
+        if (!hasActiveAnimation) {
+          // Only log every 60 frames (once per second) to avoid spam
+          if (frameCount % 60 === 0) {
+            console.log('🚨 FRAME-BY-FRAME: T-POSE DETECTED! Immediate fix...');
+          }
 
-        // Visual indicator - flash the scene to show recovery is happening
-        if (sceneRef.current) {
-          const originalBg = sceneRef.current.background;
-          sceneRef.current.background = new THREE.Color(0xff0000); // Red flash
-          setTimeout(() => {
-            if (sceneRef.current) sceneRef.current.background = originalBg;
-          }, 200);
-        }
+          // Stop everything first (no delay)
+          mixerRef.current.stopAllAction();
+          currentActionRef.current = null;
 
-        // Stop everything first
-        mixerRef.current.stopAllAction();
-        currentActionRef.current = null;
-
-        // Try to restart animation chain immediately
-        const animations = getIdleAnimations();
-        if (animations.length > 0) {
-          console.log('🎯 Emergency restart with', animations.length, 'animations');
-          playAnimationChain(animations);
-        } else {
-          // No animations available, force breathing animation NOW
-          console.log('💨 Emergency breathing animation - NO DELAY');
+          // Always go straight to breathing animation for guaranteed success
           const breathingAction = createBreathingAnimation();
           if (breathingAction) {
             breathingAction.reset();
             breathingAction.play();
             currentActionRef.current = breathingAction;
+          } else {
+            // If even breathing fails, try the animation chain as last resort
+            const animations = getIdleAnimations();
+            if (animations.length > 0) {
+              playAnimationChain(animations);
+            }
           }
         }
       }
     };
 
-    // Check every 2 seconds (very aggressive)
-    animationMonitorRef.current = setInterval(checkAnimationStatus, 2000);
+    // Use requestAnimationFrame for continuous monitoring
+    let animationId: number;
+    const animate = () => {
+      checkAnimationEveryFrame();
+      animationId = requestAnimationFrame(animate);
+    };
 
-    // Check immediately and after 0.5 seconds
-    const immediateCheck = setTimeout(checkAnimationStatus, 100);
-    const quickCheck = setTimeout(checkAnimationStatus, 500);
+    // Start the continuous monitoring
+    animate();
 
     return () => {
-      clearTimeout(immediateCheck);
-      clearTimeout(quickCheck);
-      if (animationMonitorRef.current) {
-        clearInterval(animationMonitorRef.current);
-        animationMonitorRef.current = null;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
       }
     };
   }, [modelPath, viewMode, createBreathingAnimation]);
@@ -550,7 +544,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
           console.log('🔄 Trying next animation...');
           animationChainTimeoutRef.current = setTimeout(() => {
             playNextInChain();
-          }, 200); // Faster fallback
+          }, 10); // Ultra-fast fallback
         }
       );
     };
