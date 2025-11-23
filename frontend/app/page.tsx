@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
+import { useVoiceAgent } from "@/hooks/useVoiceAgent";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
@@ -28,12 +29,9 @@ type HoldingsView = "crypto-holdings" | "stocks-holdings" | "options-holdings" |
 
 const subredditOptions = [
   "All",
-  "r/Polymarket",
-  "r/PredictionMarket",
   "r/wallstreetbets",
-  "r/pennystocks",
-  "r/cryptocurrency",
-  "r/daytrading",
+  "r/CryptoCurrency",
+  "r/Bitcoin",
 ] as const;
 
 type SubredditOption = typeof subredditOptions[number];
@@ -48,7 +46,7 @@ export default function Home() {
   const [isMuted, setIsMuted] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("risk");
-  const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
+  const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | "agent" | null>(null);
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
   const [riskScore, setRiskScore] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState("0");
@@ -69,6 +67,39 @@ export default function Home() {
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [navbarHolding, setNavbarHolding] = useState<{ symbol: string; name: string } | null>(null);
 
+  // Voice Agent
+  const voiceAgent = useVoiceAgent({
+    onTranscript: (text) => {
+      // Update messages with transcript
+      if (text) {
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg?.role === 'user' && lastMsg.text !== text) {
+            return [...prev.slice(0, -1), { ...lastMsg, text, time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) }];
+          }
+          return prev;
+        });
+      }
+    },
+    onAgentResponse: (text) => {
+      // Add agent response to messages
+      if (text) {
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg?.role === 'agent' && lastMsg.text !== text) {
+            return [...prev.slice(0, -1), { role: "agent" as const, text, time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) }];
+          } else if (lastMsg?.role !== 'agent') {
+            return [...prev, { role: "agent" as const, text, time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) }];
+          }
+          return prev;
+        });
+      }
+    },
+    onError: (error) => {
+      console.error("Voice agent error:", error);
+    }
+  });
+
   // Character data
   const characters = [
     { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm" },
@@ -78,6 +109,35 @@ export default function Home() {
     { id: "character5", name: "Character 5", image: "/character5_profile.png", vrm: "/character5.vrm" },
   ];
   const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
+
+  // Debug keybindings for demo: "-" crash, "=" moonshot, "\\" clear override
+  useEffect(() => {
+    const triggerScenario = async (scenario: "crash" | "moon") => {
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/debug/scenario/${scenario}`, { method: "POST" });
+      } catch (err) {
+        console.error("Failed to trigger debug scenario:", err);
+      }
+    };
+
+    const handleKey = (e: KeyboardEvent) => {
+      // Only trigger when not typing in inputs/textareas
+      const target = e.target as HTMLElement | null;
+      const isFormField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isFormField) return;
+
+      if (e.key === "-") {
+        triggerScenario("crash");
+      } else if (e.key === "=") {
+        triggerScenario("moon");
+      } else if (e.key === "\\") {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/debug/scenario/clear`, { method: "POST" }).catch(console.error);
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
 
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
@@ -239,6 +299,16 @@ export default function Home() {
   useEffect(() => {
     setSentimentExpanded(false);
   }, [selectedSubreddit]);
+
+  // Auto-connect voice agent when modal opens
+  useEffect(() => {
+    if (agentExpanded && !voiceAgent.isConnected) {
+      voiceAgent.connect();
+    } else if (!agentExpanded && voiceAgent.isConnected) {
+      voiceAgent.disconnect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentExpanded]);
 
   const handleSendMessage = () => {
     if (!messageInput.trim()) return;
@@ -654,6 +724,20 @@ export default function Home() {
               <ActivityLogIcon width="18" height="18" />
             </button>
 
+            <button
+              onClick={() => setAgentExpanded(true)}
+              className="w-8 h-8 rounded flex items-center justify-center transition-colors"
+              style={{
+                background: hoveredIcon === "agent" ? 'var(--slate-4)' : 'transparent',
+                color: hoveredIcon === "agent" || agentExpanded ? 'var(--slate-12)' : 'var(--slate-11)'
+              }}
+              title="Voice Agent"
+              onMouseEnter={() => setHoveredIcon("agent")}
+              onMouseLeave={() => setHoveredIcon(null)}
+            >
+              <PersonIcon width="18" height="18" />
+            </button>
+
             <div className="mt-auto">
               <button
                 onClick={() => setSettingsOpen(true)}
@@ -720,12 +804,19 @@ export default function Home() {
                         <div>
                           <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedCharacter.name}</Text>
                           <Flex align="center" gap="1">
-                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--green-9)' }}></div>
-                            <Text size="1" weight="medium" style={{ color: 'var(--green-11)' }}>Online & Monitoring</Text>
+                            <div className={`w-2 h-2 rounded-full ${voiceAgent.isConnected ? 'animate-pulse' : ''}`} style={{ background: voiceAgent.isConnected ? 'var(--green-9)' : 'var(--slate-9)' }}></div>
+                            <Text size="1" weight="medium" style={{ color: voiceAgent.isConnected ? 'var(--green-11)' : 'var(--slate-11)' }}>
+                              {voiceAgent.isConnected ? 'Voice Connected' : 'Voice Disconnected'}
+                            </Text>
+                            {voiceAgent.isThinking && <Badge color="blue" size="1">Thinking...</Badge>}
+                            {voiceAgent.isSpeaking && <Badge color="purple" size="1">Speaking...</Badge>}
                           </Flex>
                         </div>
                       </Flex>
-                      <button className="w-8 h-8 flex items-center justify-center rounded-lg" onClick={() => setAgentExpanded(false)}>
+                      <button className="w-8 h-8 flex items-center justify-center rounded-lg" onClick={() => {
+                        voiceAgent.disconnect();
+                        setAgentExpanded(false);
+                      }}>
                         <Text size="4">✕</Text>
                       </button>
                     </Flex>
@@ -740,12 +831,46 @@ export default function Home() {
                         </div>
                       </div>
                     ))}
+                    {voiceAgent.transcript && (
+                      <div className="flex justify-end">
+                        <div className="max-w-[80%]">
+                          <div className="px-4 py-2 rounded-lg opacity-70" style={{ background: 'var(--slate-4)' }}>
+                            <Text size="1" style={{ color: 'var(--slate-11)' }}>{voiceAgent.transcript}</Text>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="p-4 border-t" style={{ borderColor: 'var(--slate-6)' }}>
-                    <Flex gap="2">
-                      <input type="text" placeholder="Ask me about the markets..." value={messageInput} onChange={(e) => setMessageInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} className="flex-1 px-3 py-2 rounded-lg border outline-none" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-7)', color: 'var(--slate-12)' }} />
+                    <Flex gap="2" align="center">
+                      {!voiceAgent.isConnected ? (
+                        <Button onClick={voiceAgent.connect} size="2" style={{ background: 'var(--green-9)', color: 'white', cursor: 'pointer' }}>
+                          Connect Voice
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            onClick={voiceAgent.isRecording ? voiceAgent.stopRecording : voiceAgent.startRecording}
+                            size="2"
+                            color={voiceAgent.isRecording ? "red" : "green"}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {voiceAgent.isRecording ? "🔴 Stop" : "🎤 Speak"}
+                          </Button>
+                          <Button onClick={voiceAgent.disconnect} size="2" variant="outline" style={{ cursor: 'pointer' }}>
+                            Disconnect
+                          </Button>
+                        </>
+                      )}
+                      <div className="flex-1" />
+                      <input type="text" placeholder="Or type a message..." value={messageInput} onChange={(e) => setMessageInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} className="flex-1 px-3 py-2 rounded-lg border outline-none" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-7)', color: 'var(--slate-12)' }} />
                       <Button onClick={handleSendMessage} style={{ background: 'var(--red-9)', color: 'white', cursor: 'pointer' }}>Send</Button>
                     </Flex>
+                    {voiceAgent.error && (
+                      <Text size="1" style={{ color: 'var(--red-10)', marginTop: '0.5rem' }}>
+                        {voiceAgent.error}
+                      </Text>
+                    )}
                   </div>
                 </div>
               </div>

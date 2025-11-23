@@ -17,6 +17,7 @@ from app.services.supabase import get_supabase
 from app.services.anomaly_monitor import get_anomaly_monitor
 from app.services.openai_client import get_openai_client
 from app.services.finnhub import finnhub_service
+from app.services.voice_session_manager import speak as voice_speak
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,12 +29,12 @@ logger = logging.getLogger(__name__)
 class AnomalyWorker:
     """
     Background worker that monitors for anomalies and alerts the AI agent.
-    
     Monitors:
     - Portfolio balance changes
     - BTC price movements
     - Risk score changes
     - Trading activity anomalies
+    Applies a cooldown to avoid spamming voice alerts.
     """
     
     def __init__(self, websocket_manager=None, agent_session_manager=None):
@@ -46,6 +47,8 @@ class AnomalyWorker:
         self.interval_seconds = 5  # Check every 5 seconds
         self.is_running = False
         self.anomaly_callbacks: List[Callable[[Dict[str, Any]], Awaitable[None]]] = []
+        self._last_alert_time: Dict[str, float] = {}
+        self.alert_cooldown_seconds = 30
         
         logger.info("✅ Anomaly Worker initialized")
     
@@ -94,45 +97,8 @@ class AnomalyWorker:
             await self._ping_agent_with_anomalies(anomalies_detected)
     
     async def _check_finnhub_anomalies(self) -> List[Dict[str, Any]]:
-        """Check Finnhub service data for anomalies"""
-        anomalies = []
-        
-        try:
-            # Get all current prices from Finnhub
-            all_prices = finnhub_service.get_all_prices()
-            
-            if not all_prices:
-                # No prices available - could be an anomaly itself (service down?)
-                logger.debug("No prices available from Finnhub service")
-                return anomalies
-            
-            # Check each symbol for anomalies
-            for symbol, current_price in all_prices.items():
-                if current_price <= 0:
-                    continue
-                
-                # Detect price anomalies (sudden movements)
-                price_anomaly = self.monitor.detect_anomalies(
-                    metric_name=f"finnhub_{symbol}_price",
-                    current_value=current_price,
-                    rate_of_change_threshold=0.05  # 5% change threshold
-                )
-                
-                if price_anomaly and price_anomaly["severity"] in ["high", "medium"]:
-                    anomalies.append({
-                        **price_anomaly,
-                        "context": f"Finnhub {symbol} price anomaly: ${current_price:,.2f}",
-                        "source": "finnhub",
-                        "symbol": symbol
-                    })
-            
-            # Check for connection issues (no price updates for a while)
-            # This would require tracking last update time - for now skip
-            
-        except Exception as e:
-            logger.error(f"Failed to check Finnhub anomalies: {e}", exc_info=True)
-        
-        return anomalies
+        """Check Finnhub service data for anomalies (disabled for jump-only demo)"""
+        return []
     
     async def _check_portfolio_anomalies(self) -> Optional[Dict[str, Any]]:
         """Check portfolio balance for significant changes"""
@@ -167,53 +133,22 @@ class AnomalyWorker:
         anomalies = []
         
         try:
-            context = await self.db.get_latest_market_context()
-            if not context:
-                return anomalies
-            
-            # Check BTC price for anomalies
-            btc_price = float(context.get("btc_price", 0))
+            # Pull live price directly from Finnhub service (ignore ingest cadence)
+            btc_price = finnhub_service.get_price("BTC") or finnhub_service.get_price("BTCUSD") or 0
             if btc_price > 0:
-                price_anomaly = self.monitor.detect_anomalies(
-                    metric_name="btc_price",
-                    current_value=btc_price,
-                    rate_of_change_threshold=0.03  # 3% price change threshold
-                )
-                if price_anomaly and price_anomaly["severity"] in ["high", "medium"]:
+                base = 85000.0
+                delta = btc_price - base
+                delta_pct = (delta / base) * 100
+                if btc_price <= 60000 or btc_price >= 100000:
                     anomalies.append({
-                        **price_anomaly,
-                        "context": f"BTC price anomaly: ${btc_price:,.2f}"
+                        "metric": "btc_price_threshold",
+                        "value": btc_price,
+                        "delta": delta,
+                        "delta_pct": delta_pct,
+                        "severity": "high",
+                        "context": f"BTC at ${btc_price:,.2f} vs base ${base:,.2f}"
                     })
-            
-            # Check risk score for sudden spikes
-            risk_score = int(context.get("risk_score", 0))
-            if risk_score > 0:
-                risk_anomaly = self.monitor.detect_anomalies(
-                    metric_name="risk_score",
-                    current_value=risk_score,
-                    rate_of_change_threshold=0.20  # 20% change in risk score
-                )
-                if risk_anomaly and risk_anomaly["severity"] in ["high"]:
-                    anomalies.append({
-                        **risk_anomaly,
-                        "context": f"Risk score spike: {risk_score}/100"
-                    })
-            
-            # Check price change 24h for extreme movements
-            price_change = float(context.get("price_change_24h", 0))
-            if abs(price_change) > 5.0:  # More than 5% change
-                # Track this as a separate metric
-                change_anomaly = self.monitor.detect_anomalies(
-                    metric_name="price_change_24h",
-                    current_value=abs(price_change),
-                    rate_of_change_threshold=0.50  # 50% threshold for change detection
-                )
-                if change_anomaly and change_anomaly["severity"] in ["high"]:
-                    anomalies.append({
-                        **change_anomaly,
-                        "context": f"Extreme 24h price change: {price_change:+.2f}%"
-                    })
-            
+        
         except Exception as e:
             logger.error(f"Failed to check market anomalies: {e}")
         
@@ -232,65 +167,57 @@ class AnomalyWorker:
             return None
     
     async def _ping_agent_with_anomalies(self, anomalies: List[Dict[str, Any]]):
-        """
-        Ping the AI agent when anomalies are detected.
-        
-        Methods:
-        1. Send WebSocket INTERRUPT message
-        2. Inject SystemMessage into agent conversation
-        """
+        """Send anomaly summary to the agent chat API"""
         if not anomalies:
             return
-        
-        # Filter for high/medium severity only
+
         significant_anomalies = [a for a in anomalies if a.get("severity") in ["high", "medium"]]
-        
+        # Only keep anomalies with jump info (delta/delta_pct)
+        significant_anomalies = [a for a in significant_anomalies if "delta" in a and "delta_pct" in a]
         if not significant_anomalies:
             return
-        
-        logger.warning(f"🚨 {len(significant_anomalies)} significant anomaly(ies) detected, pinging agent")
-        
-        # Generate alert message with context
-        anomaly_summaries = []
-        for anomaly in significant_anomalies:
-            summary = f"- {anomaly['metric']}: {anomaly.get('message', 'Anomaly detected')} (severity: {anomaly['severity']})"
-            if 'context' in anomaly:
-                summary += f" | {anomaly['context']}"
-            anomaly_summaries.append(summary)
-        
-        alert_message = f"ANOMALY DETECTED:\n" + "\n".join(anomaly_summaries)
-        
-        # Method 1: Send WebSocket ANOMALY_ALERT (primary method, similar to monitor worker INTERRUPT)
-        # Frontend will handle injecting the system message into agent conversation
-        if self.ws_manager:
-            try:
-                # Check if ws_manager has broadcast method (for agent WebSocket)
-                if hasattr(self.ws_manager, 'broadcast'):
-                    await self.ws_manager.broadcast({
-                        "type": "ANOMALY_ALERT",
-                        "message": alert_message,
-                        "anomalies": significant_anomalies,
-                        "count": len(significant_anomalies),
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
-                    logger.info("✅ ANOMALY_ALERT sent via WebSocket broadcast")
-                else:
-                    # If it's a different type of manager, try to send directly
-                    logger.warning(f"WebSocket manager doesn't have broadcast method: {type(self.ws_manager)}")
-            except Exception as e:
-                logger.error(f"Failed to send WebSocket ANOMALY_ALERT: {e}", exc_info=True)
+
+        # Cooldown: suppress repeated alerts for the same metric
+        now = datetime.utcnow().timestamp()
+        cooled = []
+        for a in significant_anomalies:
+            metric = a.get("metric", "unknown")
+            last = self._last_alert_time.get(metric, 0)
+            if now - last >= self.alert_cooldown_seconds:
+                cooled.append(a)
+                self._last_alert_time[metric] = now
+        significant_anomalies = cooled
+        if not significant_anomalies:
+            logger.debug("All anomalies suppressed due to cooldown")
+            return
+
+        logger.warning(f"🚨 {len(significant_anomalies)} significant anomaly(ies) detected, pinging voice session")
+
+        # Use the first jump anomaly for alert content (single-user demo)
+        top_anomaly = significant_anomalies[0]
+
+        btc_price = finnhub_service.get_price("BTC") or finnhub_service.get_price("BTCUSD") or 0
+        risk_score = next((a.get("value") for a in significant_anomalies if a.get("metric") == "risk_score"), 0)
+        hype_score = next((a.get("value") for a in significant_anomalies if a.get("metric") == "hype_score"), 0)
+
+        delta_pct = top_anomaly.get('delta_pct', 0)
+        delta = top_anomaly.get('delta', 0)
+
+        alert_context = {
+            "alert_type": "ANOMALY_ALERT",
+            "risk_score": risk_score if risk_score else (95 if delta < 0 else 0),
+            "hype_score": hype_score if hype_score else (95 if delta > 0 else 0),
+            "btc_price": btc_price or 0,
+            "price_change_24h": delta_pct,
+        }
+
+        alert_message = f"ALERT: BTC to {btc_price:,.0f} dollars. Move {delta:+,.0f} dollars ({delta_pct:+.2f}%). Base eighty five thousand. React now."
+
+        delivered = await voice_speak(alert_message, alert_context)
+        if delivered:
+            logger.info("✅ Anomaly alert spoken via active voice session")
         else:
-            logger.debug("No WebSocket manager available, anomaly alert not broadcast")
-        
-        # Method 2: Direct agent message injection (optional, for future enhancement)
-        # Currently, WebSocket is the primary method and frontend handles agent injection
-        if self.agent_session_manager:
-            try:
-                system_message = f"SYSTEM_ALERT: {alert_message}"
-                await self._inject_agent_message(system_message)
-                logger.info("✅ Anomaly alert also injected directly into agent conversation")
-            except Exception as e:
-                logger.debug(f"Direct agent injection not available: {e}")
+            logger.warning("⚠️ No active voice session to speak anomaly alert")
     
     async def _inject_agent_message(self, message: str):
         """
@@ -327,4 +254,3 @@ async def run_anomaly_worker(websocket_manager=None, agent_session_manager=None)
 if __name__ == "__main__":
     # For standalone testing
     asyncio.run(run_anomaly_worker())
-

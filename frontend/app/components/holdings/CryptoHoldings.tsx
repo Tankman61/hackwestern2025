@@ -18,12 +18,9 @@ type TimeFrame = "1m" | "5m" | "10m" | "15m" | "30m" | "1h" | "4h" | "1d";
 
 const subredditOptions = [
   "All",
-  "r/Polymarket",
-  "r/PredictionMarket",
   "r/wallstreetbets",
-  "r/pennystocks",
-  "r/cryptocurrency",
-  "r/daytrading",
+  "r/CryptoCurrency",
+  "r/Bitcoin",
 ] as const;
 
 type SubredditOption = typeof subredditOptions[number];
@@ -178,6 +175,7 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
   const [voiceError, setVoiceError] = useState<string>("");
 
   const wsVoiceRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<string[]>([]);
   const isPlayingAudioRef = useRef(false);
@@ -313,8 +311,19 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
     return threadId;
   };
   const threadIdRef = useRef<string>(getThreadId());
+  // Auto-connect voice WebSocket on mount so agent is ready without visiting voice-test
+  useEffect(() => {
+    if (!wsVoiceRef.current) {
+      connectVoiceAgent();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const connectVoiceAgent = async () => {
+    // Avoid duplicate connections
+    if (wsVoiceRef.current && (wsVoiceRef.current.readyState === WebSocket.OPEN || wsVoiceRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     try {
       const ws = new WebSocket("ws://localhost:8000/ws/voice/agent");
 
@@ -332,13 +341,14 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
       };
 
       ws.onerror = (error) => {
-        console.error("Voice WebSocket error:", error);
+        console.error("Voice WebSocket error. readyState:", ws.readyState, "event:", error);
         setVoiceError("WebSocket connection error");
       };
 
       ws.onclose = () => {
         console.log("Voice WebSocket closed");
         setIsVoiceConnected(false);
+        wsVoiceRef.current = null;
       };
 
       wsVoiceRef.current = ws;
@@ -533,17 +543,13 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
 
   const disconnectVoiceAgent = () => {
     if (wsVoiceRef.current) {
-      // Only send message if WebSocket is in OPEN state
-      if (wsVoiceRef.current.readyState === WebSocket.OPEN) {
-        try {
+      try {
+        if (wsVoiceRef.current.readyState === WebSocket.OPEN) {
           wsVoiceRef.current.send(JSON.stringify({ type: "stop" }));
-        } catch (err) {
-          console.warn("Failed to send stop message:", err);
         }
-      }
-      // Close the connection regardless of state
-      if (wsVoiceRef.current.readyState === WebSocket.CONNECTING || wsVoiceRef.current.readyState === WebSocket.OPEN) {
         wsVoiceRef.current.close();
+      } catch (err) {
+        console.error("Error disconnecting voice WS:", err);
       }
       wsVoiceRef.current = null;
     }

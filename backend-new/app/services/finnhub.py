@@ -8,6 +8,7 @@ import json
 import logging
 from typing import Dict, Optional, Set, Callable, Awaitable
 from datetime import datetime
+import time
 import websockets
 from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import InvalidStatus
@@ -49,10 +50,116 @@ class FinnhubMarketDataService:
         self.crypto_trade_aggregator: Dict[str, Dict] = {}
         
         self._running = False
+        # Override injection for demos/debug
+        self.override_prices: Dict[str, Dict[str, any]] = {}  # symbol -> {target_price, data_type, start_price, start_time, ramp_seconds}
+        self.override_task: Optional[asyncio.Task] = None
+        self.override_interval_seconds = 0.25
+        self._last_subscribe_error: Dict[str, float] = {}
         
     def add_price_update_callback(self, callback: Callable[[str, str, dict], Awaitable[None]]):
         """Add a callback to be called when prices update"""
         self.price_update_callbacks.append(callback)
+    
+    async def _start_override_loop(self):
+        """Continuously broadcast override prices for active scenarios"""
+        if self.override_task and not self.override_task.done():
+            return
+
+        async def _loop():
+            while self.override_prices:
+                try:
+                    now_ts = datetime.utcnow().timestamp()
+                    for symbol, meta in list(self.override_prices.items()):
+                        target = meta.get("target_price")
+                        data_type = meta.get("data_type", "crypto")
+                        start_price = meta.get("start_price", target)
+                        start_time = meta.get("start_time", now_ts)
+                        ramp_seconds = meta.get("ramp_seconds", 5.0)
+
+                        elapsed = max(0.0, now_ts - start_time)
+                        progress = min(1.0, elapsed / ramp_seconds) if ramp_seconds > 0 else 1.0
+                        price = start_price + (target - start_price) * progress
+
+                        # Update in-memory cache for both clean and USD/USDT variants
+                        variants = [
+                            symbol,
+                            f"{symbol}USD",
+                            f"{symbol}USDT",
+                            f"{symbol}/USD"
+                        ]
+                        for variant in variants:
+                            self.live_prices[variant] = price
+
+                        # Broadcast synthetic trade to subscribers
+                        trade_message = {
+                            "type": "trade",
+                            "data": {
+                                "symbol": symbol,
+                                "timestamp": int(now_ts),
+                                "price": price,
+                                "size": 0
+                            }
+                        }
+                        await self._broadcast_update(data_type, symbol, trade_message)
+
+                        # Broadcast synthetic bar for bar-driven charts
+                        bar_message = {
+                            "type": "bar",
+                            "data": {
+                                "symbol": symbol,
+                                "timestamp": int(now_ts),
+                                "open": price,
+                                "high": price,
+                                "low": price,
+                                "close": price,
+                                "volume": 0
+                            }
+                        }
+                        await self._broadcast_update(data_type, symbol, bar_message)
+
+                        # Persist ramp meta
+                        meta["start_price"] = start_price
+                        meta["start_time"] = start_time
+                        meta["ramp_seconds"] = ramp_seconds
+
+                    await asyncio.sleep(self.override_interval_seconds)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Override loop error: {e}", exc_info=True)
+                    await asyncio.sleep(self.override_interval_seconds)
+
+        self.override_task = asyncio.create_task(_loop())
+
+    async def set_override_price(self, symbol: str, target_price: float, data_type: str = "crypto", ramp_seconds: float = 20.0):
+        """Enable persistent override for a symbol (crash/moon demos)"""
+        clean = symbol.replace("USDT", "").replace("USD", "").replace("/", "").upper()
+        # Use current price as start to ramp from wherever we are
+        current = self.get_price(clean) or self.get_price(f"{clean}USD") or target_price
+        self.override_prices[clean] = {
+            "target_price": target_price,
+            "data_type": data_type,
+            "start_price": current,
+            "start_time": datetime.utcnow().timestamp(),
+            "ramp_seconds": ramp_seconds,
+        }
+        await self._start_override_loop()
+
+    async def clear_override(self, symbol: Optional[str] = None):
+        """Clear override for a symbol or all overrides"""
+        if symbol:
+            clean = symbol.replace("USDT", "").replace("USD", "").replace("/", "").upper()
+            self.override_prices.pop(clean, None)
+        else:
+            self.override_prices.clear()
+
+        if not self.override_prices and self.override_task:
+            self.override_task.cancel()
+            try:
+                await self.override_task
+            except asyncio.CancelledError:
+                pass
+            self.override_task = None
         
     def set_fastapi_loop(self, loop: asyncio.AbstractEventLoop):
         """Set the FastAPI event loop for thread-safe callback execution"""
@@ -105,6 +212,11 @@ class FinnhubMarketDataService:
                 # Stock: AAPL -> AAPL
                 symbol = symbol_full
                 clean_symbol = symbol
+
+            # If an override is active for this symbol, ignore real ticks to avoid flicker
+            clean_upper = clean_symbol.upper()
+            if clean_upper in self.override_prices:
+                return
             
             # Update in-memory price
             self.live_prices[clean_symbol] = price
@@ -308,7 +420,13 @@ class FinnhubMarketDataService:
             await self.ws.send(json.dumps(subscribe_msg))
             logger.info(f"Subscribed to Finnhub symbol: {finnhub_symbol} (original: {symbol}, crypto={is_crypto})")
         except Exception as e:
-            logger.error(f"Error subscribing to {finnhub_symbol}: {e}")
+            now = time.time()
+            last = self._last_subscribe_error.get(finnhub_symbol, 0)
+            if now - last > 30:
+                logger.error(f"Error subscribing to {finnhub_symbol}: {e}")
+                self._last_subscribe_error[finnhub_symbol] = now
+            else:
+                logger.debug(f"Suppressed repeated subscribe error for {finnhub_symbol}: {e}")
     
     def _convert_to_finnhub_symbol(self, symbol: str, is_crypto: bool = True) -> str:
         """Convert symbol to Finnhub format"""
@@ -489,43 +607,20 @@ async def get_btc_data() -> Dict[str, any]:
     import httpx
     import os
 
-    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    # Prefer live price directly from Finnhub service to avoid HTTP dependency
+    btc_price = finnhub_service.get_price("BTC") or finnhub_service.get_price("BTCUSD")
+    if btc_price is None:
+        logger.error("❌ BTC price not available from Finnhub live cache. Is Finnhub WebSocket connected and subscribed?")
+        raise ValueError("BTC price not available from Finnhub.")
 
-    # Call FastAPI server to get price (same pattern as agent tool)
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{API_BASE_URL}/api/prices/BTC",
-                timeout=5.0
-            )
+    logger.info(f"✅ Got BTC price from Finnhub service: ${btc_price:,.2f}")
 
-            if response.status_code == 404:
-                logger.error("❌ BTC price not available from Finnhub. Is FastAPI server running with Finnhub WebSocket connected?")
-                raise ValueError("BTC price not available from Finnhub. FastAPI server might not be running or Finnhub WebSocket is not connected.")
-
-            response.raise_for_status()
-            data = response.json()
-
-            btc_price = data.get("price")
-            if btc_price is None:
-                raise ValueError("No price data in response from FastAPI")
-
-            logger.info(f"✅ Got BTC price from FastAPI: ${btc_price:,.2f}")
-
-            # For MVP: Return live price with estimated 24h values
-            # TODO: Track historical data to calculate real 24h change, high, low, volume
-            return {
-                "btc_price": round(btc_price, 2),
-                "price_change_24h": 0.0,  # TODO: Calculate from historical data
-                "volume_24h": "$0",  # TODO: Aggregate from trade volumes
-                "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
-                "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
-            }
-
-    except httpx.HTTPError as e:
-        logger.error(f"❌ Failed to fetch BTC price from FastAPI: {e}")
-        raise ValueError(f"Failed to fetch BTC price from FastAPI server: {e}")
-    except Exception as e:
-        logger.error(f"❌ Unexpected error fetching BTC price: {e}")
-        raise ValueError(f"Unexpected error: {e}")
-
+    # For MVP: Return live price with estimated 24h values
+    # TODO: Track historical data to calculate real 24h change, high, low, volume
+    return {
+        "btc_price": round(btc_price, 2),
+        "price_change_24h": 0.0,  # TODO: Calculate from historical data
+        "volume_24h": "$0",  # TODO: Aggregate from trade volumes
+        "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
+        "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
+    }

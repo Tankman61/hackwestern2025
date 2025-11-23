@@ -14,6 +14,7 @@ from alpaca.trading.requests import (
     StopOrderRequest,
     StopLimitOrderRequest,
     GetOrdersRequest,
+    ClosePositionRequest,
 )
 from alpaca.trading.enums import OrderSide, TimeInForce, OrderType, QueryOrderStatus
 from alpaca.data.models import Bar, Trade
@@ -179,10 +180,15 @@ class AlpacaTradingService:
             return False
         
         try:
-            if qty:
-                self.client.close_position(symbol, close_options={"qty": str(qty)})
+            # Normalize symbol for Alpaca (e.g., BTC/USD -> BTCUSD)
+            alpaca_symbol = symbol.replace("/", "").replace("-", "").upper()
+
+            if qty is not None:
+                # Use Alpaca request model so the client can serialize correctly
+                close_req = ClosePositionRequest(qty=str(qty))
+                self.client.close_position(alpaca_symbol, close_options=close_req)
             else:
-                self.client.close_position(symbol)
+                self.client.close_position(alpaca_symbol)
             logger.info(f"Closed position {symbol} (qty={qty or 'all'})")
             return True
         except Exception as e:
@@ -495,7 +501,7 @@ class AlpacaTradingService:
     def _format_order(self, order) -> Dict[str, Any]:
         """Format order object to dict"""
         return {
-            "id": order.id,
+            "id": str(order.id) if order.id else None,
             "client_order_id": order.client_order_id,
             "created_at": order.created_at.isoformat() if order.created_at else None,
             "updated_at": order.updated_at.isoformat() if order.updated_at else None,
@@ -505,9 +511,9 @@ class AlpacaTradingService:
             "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
             "failed_at": order.failed_at.isoformat() if order.failed_at else None,
             "replaced_at": order.replaced_at.isoformat() if order.replaced_at else None,
-            "replaced_by": order.replaced_by,
-            "replaces": order.replaces,
-            "asset_id": order.asset_id,
+            "replaced_by": str(order.replaced_by) if order.replaced_by else None,
+            "replaces": str(order.replaces) if order.replaces else None,
+            "asset_id": str(order.asset_id) if order.asset_id else None,
             "symbol": order.symbol,
             "asset_class": order.asset_class.value,
             "notional": float(order.notional) if order.notional else None,

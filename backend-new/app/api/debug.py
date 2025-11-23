@@ -18,9 +18,12 @@ PROPER SOLUTION for testing crash scenarios:
 - OR use a proper WebSocket mock/proxy that intercepts Finnhub data
 - OR create a "test mode" flag that switches to mock price provider
 """
+import time
+import random
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.finnhub import finnhub_service
+from app.api.market_websocket import broadcast_price_update
 
 router = APIRouter()
 
@@ -136,4 +139,83 @@ async def trigger_alert(alert_type: str = "RISK_CRITICAL"):
         "message": f"Test alert configured: {alert_type}",
         "payload": payload,
         "note": "To actually trigger alerts, use /inject-price to manipulate prices and let the monitor worker detect it."
+    }
+
+
+async def _inject_and_broadcast(symbol: str, price: float, data_type: str = "crypto"):
+    """
+    Helper to inject price into Finnhub cache and broadcast to websocket subscribers.
+    """
+    # Normalize symbol variants
+    variants = [
+        symbol,
+        f"{symbol}USD",
+        f"{symbol}USDT",
+        f"{symbol}/USD"
+    ]
+    for variant in variants:
+        finnhub_service.live_prices[variant] = price
+
+    # Broadcast a synthetic trade event so frontend updates immediately
+    message = {
+        "type": "trade",
+        "data": {
+            "symbol": symbol,
+            "timestamp": int(time.time() * 1000),
+            "price": price,
+            "size": 0
+        }
+    }
+    await broadcast_price_update(data_type, symbol, message)
+    return variants
+
+
+@router.post("/debug/scenario/crash")
+async def scenario_crash(symbol: str = "BTC", target_price: float = 15000.0, ramp_seconds: float = 20.0):
+    """
+    Force a price crash for the given symbol and broadcast it immediately.
+    Default: BTC to ~15,000 (randomized +/-10%).
+    """
+    base = target_price or 15000.0
+    randomized = random.uniform(base * 0.9, base * 1.1)
+    await finnhub_service.set_override_price(symbol, randomized, data_type="crypto", ramp_seconds=ramp_seconds)
+    variants = await _inject_and_broadcast(symbol, randomized)
+    return {
+        "success": True,
+        "scenario": "crash",
+        "symbol": symbol,
+        "price": randomized,
+        "variants_updated": variants
+    }
+
+
+@router.post("/debug/scenario/moon")
+async def scenario_moon(symbol: str = "BTC", target_price: float = 120000.0, ramp_seconds: float = 20.0):
+    """
+    Force a price moonshot for the given symbol and broadcast it immediately.
+    Default: BTC to ~120,000 (randomized +/-10%).
+    """
+    base = target_price or 120000.0
+    randomized = random.uniform(base * 0.9, base * 1.1)
+    await finnhub_service.set_override_price(symbol, randomized, data_type="crypto", ramp_seconds=ramp_seconds)
+    variants = await _inject_and_broadcast(symbol, randomized)
+    return {
+        "success": True,
+        "scenario": "moon",
+        "symbol": symbol,
+        "price": randomized,
+        "variants_updated": variants
+    }
+
+
+@router.post("/debug/scenario/clear")
+async def scenario_clear(symbol: str = "BTC"):
+    """
+    Clear override for the given symbol (or all if symbol omitted).
+    """
+    await finnhub_service.clear_override(symbol or None)
+    return {
+        "success": True,
+        "scenario": "clear",
+        "symbol": symbol or "all"
     }

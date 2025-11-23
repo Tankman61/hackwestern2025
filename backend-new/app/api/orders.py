@@ -40,8 +40,13 @@ def _check_account_lock() -> None:
     Check if trading account is locked. Raises HTTPException if locked.
     Used to enforce emergency lockout from lock_user_account() tool.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔒 Checking account lock...")
+
     db = get_supabase()
-    result = db.client.table("portfolio").select("is_locked, lock_reason, lock_expires_at").limit(1).execute()
+    result = db.client.table("portfolio").select("id, is_locked, lock_reason, lock_expires_at").limit(1).execute()
+    logger.info(f"Lock check result: {result.data}")
 
     if not result.data:
         return  # No portfolio record, allow trade
@@ -84,8 +89,10 @@ async def get_orders(status: str = Query(default="open", regex="^(open|closed|al
 
     for order in orders:
         qty = order.get("qty") or order.get("notional") or 0
+        # Convert UUID to string for JSON serialization
+        order_id = str(order["id"]) if order["id"] is not None else None
         formatted.append({
-            "id": order["id"],
+            "id": order_id,
             "ticker": _format_symbol(order["symbol"]),
             "order_type": f"{order['order_type'].upper()} {order['side'].upper()}",
             "amount": float(qty),
@@ -154,7 +161,11 @@ async def create_order(order: CreateOrderRequest):
     if "symbol" not in result:
         result["symbol"] = symbol
     result["ticker"] = _format_symbol(result.get("symbol", symbol))
-    
+
+    # Convert UUID to string for JSON serialization in response
+    if "id" in result and result["id"] is not None:
+        result["id"] = str(result["id"])
+
     # Broadcast order update via WebSocket
     try:
         # Safely extract order fields
@@ -170,10 +181,15 @@ async def create_order(order: CreateOrderRequest):
         order_type_str = str(order_type).upper() if order_type else ""
         side_str = str(side).upper() if side else ""
         
+        # Convert UUID to string for JSON serialization
+        order_id = result.get("id")
+        if order_id is not None:
+            order_id = str(order_id)
+
         order_update = {
             "type": "order_update",
             "data": {
-                "id": result.get("id"),
+                "id": order_id,
                 "ticker": result.get("ticker", _format_symbol(result.get("symbol", ""))),
                 "order_type": f"{order_type_str} {side_str}",
                 "amount": result.get("qty") or result.get("notional") or order.amount,

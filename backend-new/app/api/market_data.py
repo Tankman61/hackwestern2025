@@ -186,21 +186,41 @@ async def get_sentiment():
     db = get_supabase()
 
     result = db.client.table("market_context")\
-        .select("sentiment_bullish, sentiment_bearish, sentiment_score, post_volume_24h")\
+        .select("sentiment_bullish, sentiment_bearish, sentiment_score, post_volume_24h, created_at")\
         .order("created_at", desc=True)\
         .limit(1)\
         .execute()
 
     if not result.data:
-        # Return empty state if no data
+        # Return empty state if no data (worker hasn't run yet)
         return {
             "bullish": 0,
             "bearish": 0,
             "score": 0,
-            "volume": "0"
+            "volume": "0",
+            "_warning": "No data in market_context. Is the ingest worker running?"
         }
 
     data = result.data[0]
+    
+    # Check if data is stale (older than 30 seconds)
+    from datetime import datetime, timezone
+    created_at_str = data.get("created_at")
+    if created_at_str:
+        try:
+            created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+            age_seconds = (datetime.now(timezone.utc) - created_at).total_seconds()
+            if age_seconds > 30:
+                return {
+                    "bullish": int(data.get("sentiment_bullish", 0)),
+                    "bearish": int(data.get("sentiment_bearish", 0)),
+                    "score": int(data.get("sentiment_score", 0)),
+                    "volume": data.get("post_volume_24h", "0"),
+                    "_warning": f"Data is {int(age_seconds)}s old. Worker may have stopped."
+                }
+        except:
+            pass
+    
     return {
         "bullish": int(data.get("sentiment_bullish", 0)),
         "bearish": int(data.get("sentiment_bearish", 0)),

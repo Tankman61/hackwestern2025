@@ -27,6 +27,9 @@ from app.api.test_anomaly import router as test_anomaly_router
 from app.api.debug import router as debug_router
 from app.api.agent import router as agent_router
 from app.api.voice_websocket import router as voice_router
+from app.workers.ingest import DataIngestWorker
+from app.workers.monitor import TriggerMonitorWorker
+from app.workers.anomaly_worker import AnomalyWorker
 
 # Configure logging
 logging.basicConfig(
@@ -59,11 +62,46 @@ async def lifespan(app: FastAPI):
     await finnhub_service.subscribe_crypto(["BTC", "ETH"])
     logger.info("Finnhub market data service initialized (all market data display)")
     logger.info("Auto-subscribed to BTC and ETH for agent access")
+
+    # Optionally auto-start workers alongside FastAPI (demo convenience)
+    app.state.worker_tasks = []
+    if os.getenv("AUTO_START_WORKERS", "true").lower() == "true":
+        logger.info("Auto-starting workers with FastAPI lifespan")
+        ingest_worker = DataIngestWorker()
+        monitor_worker = TriggerMonitorWorker(websocket_manager=None)
+        anomaly_worker = AnomalyWorker()
+
+        # Store references for shutdown
+        app.state.ingest_worker = ingest_worker
+        app.state.monitor_worker = monitor_worker
+        app.state.anomaly_worker = anomaly_worker
+
+        # Launch in background tasks so FastAPI can serve immediately
+        app.state.worker_tasks = [
+            asyncio.create_task(ingest_worker.start()),
+            asyncio.create_task(monitor_worker.start()),
+            asyncio.create_task(anomaly_worker.start())
+        ]
+    else:
+        logger.info("AUTO_START_WORKERS disabled; workers not started by FastAPI")
     
     yield
     
     # Shutdown
     logger.info("Shutting down VibeTrade API...")
+    # Stop workers if they were started
+    worker_tasks = getattr(app.state, "worker_tasks", [])
+    if worker_tasks:
+        logger.info("Stopping background workers...")
+        await asyncio.gather(
+            app.state.ingest_worker.stop(),
+            app.state.monitor_worker.stop(),
+            app.state.anomaly_worker.stop()
+        )
+        for task in worker_tasks:
+            task.cancel()
+        logger.info("Workers stopped")
+
     await finnhub_service.stop()
     logger.info("Market data service stopped")
 
@@ -176,4 +214,3 @@ async def health():
             "note": "Alpaca used only for trading execution"
         }
     }
-
