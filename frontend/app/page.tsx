@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, PersonIcon } from "@radix-ui/react-icons";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
@@ -17,7 +17,9 @@ import PolymarketPanel from "./components/PolymarketPanel";
 import TradingPanel from "./components/TradingPanel";
 import LiveAlpacaChart from "./components/LiveAlpacaChart";
 import CryptoHoldingsDashboard from "./components/CryptoHoldingsDashboard";
+import LandingPage from "./components/LandingPage";
 import { api, type RedditPost, type SentimentStats } from "@/app/lib/api";
+import VRMViewerCompact from "./components/VRMViewerCompact";
 
 type PortfolioView = "crypto" | "stocks" | "options" | "etfs" | null;
 type HoldingsView = "crypto-holdings" | "stocks-holdings" | "options-holdings" | "etfs-holdings" | null;
@@ -40,6 +42,8 @@ export default function Home() {
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [characterSwapperOpen, setCharacterSwapperOpen] = useState(false);
+  const [showLandingPage, setShowLandingPage] = useState(false);
   const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
   const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
@@ -59,6 +63,16 @@ export default function Home() {
   const [activePortfolio, setActivePortfolio] = useState<PortfolioView>(null);
   const [activeHoldings, setActiveHoldings] = useState<HoldingsView>(null);
   const [homeResetKey, setHomeResetKey] = useState(0);
+
+  // Character data
+  const characters = [
+    { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm" },
+    { id: "character2", name: "Character 2", image: "/character2_profile.png", vrm: "/character2.vrm" },
+    { id: "character3", name: "Character 3", image: "/character3_profile.png", vrm: "/character3.vrm" },
+    { id: "character4", name: "Character 4", image: "/character4_profile.png", vrm: "/character4.vrm" },
+    { id: "character5", name: "Character 5", image: "/character5_profile.png", vrm: "/character5.vrm" },
+  ];
+  const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
 
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
@@ -191,13 +205,35 @@ export default function Home() {
       {/* Top Bar */}
       <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
-          <div className="flex items-center gap-1.5">
+          {/* Vibe Trade Title - Clickable to go to landing page */}
+          <button
+            onClick={() => setShowLandingPage(true)}
+            className="text-xl font-bold hover:opacity-80 transition-opacity"
+            style={{ color: 'var(--slate-12)', border: 'none', background: 'transparent', cursor: 'pointer' }}
+          >
+            Vibe Trade
+          </button>
+
+          <div className="flex items-center gap-1.5 ml-4">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green-9)' }}></div>
             <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)' }}>
               {currentTime || "00:00:00"} UTC
             </Text>
           </div>
         </Flex>
+
+        {/* Character Swapper Button */}
+        <Button
+          onClick={() => setCharacterSwapperOpen(true)}
+          variant="soft"
+          color="blue"
+          size="2"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <PersonIcon width="16" height="16" />
+          <Text size="2">{selectedCharacter.name}</Text>
+        </Button>
+
       </div>
 
       {/* Side Menu */}
@@ -261,17 +297,22 @@ export default function Home() {
               {/* Bottom Data Panels */}
               <div className="h-96 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
                 {/* VTuber Profile Card */}
-                <div
-                  className="border-r cursor-pointer flex items-center justify-center"
-                  style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
-                  onClick={() => setAgentExpanded(!agentExpanded)}
-                >
-                  <div className="w-[200px] h-[200px] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
-                    <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
-                    <span className="relative z-10">🎯</span>
-                    <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
+                {!showLandingPage && (
+                  <div
+                    className="border-r cursor-pointer flex items-center justify-center"
+                    style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
+                    onClick={() => setAgentExpanded(!agentExpanded)}
+                  >
+                    <div className="w-[200px] h-[200px] rounded-lg border-2 shadow-lg relative overflow-hidden" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                      <VRMViewerCompact
+                        key={`vrm-${selectedCharacter.id}`} // Force re-render when character changes
+                        onSceneClick={() => setAgentExpanded(!agentExpanded)}
+                        modelPath={selectedCharacter.vrm}
+                      />
+                      <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Polymarket Panel - Using Component */}
                 <PolymarketPanel />
@@ -542,11 +583,38 @@ export default function Home() {
                   <div className="p-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
                     <Flex justify="between" align="center">
                       <Flex align="center" gap="3">
-                        <div className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl border-2 shadow-lg relative" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
-                          <span>🎯</span>
+                        <div className="w-12 h-12 rounded-lg border-2 shadow-lg relative overflow-hidden" style={{ borderColor: 'var(--slate-6)' }}>
+                          <img
+                            src={selectedCharacter.image}
+                            alt={selectedCharacter.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback for missing images
+                              const target = e.target as HTMLImageElement;
+                              target.style.background = 'linear-gradient(135deg, var(--blue-9), var(--purple-9))';
+                              target.style.display = 'flex';
+                              target.style.alignItems = 'center';
+                              target.style.justifyContent = 'center';
+                              target.style.color = 'white';
+                              target.style.fontSize = '12px';
+                              target.style.fontWeight = 'bold';
+                              target.src = 'data:image/svg+xml;base64,' + btoa(`
+                                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect width="48" height="48" rx="8" fill="url(#gradient)"/>
+                                  <text x="24" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${selectedCharacter.name.charAt(0)}</text>
+                                  <defs>
+                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" style="stop-color:#3b82f6"/>
+                                      <stop offset="100%" style="stop-color:#8b5cf6"/>
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+                              `);
+                            }}
+                          />
                         </div>
                         <div>
-                          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>Agent Divergence</Text>
+                          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedCharacter.name}</Text>
                           <Flex align="center" gap="1">
                             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--green-9)' }}></div>
                             <Text size="1" weight="medium" style={{ color: 'var(--green-11)' }}>Online & Monitoring</Text>
@@ -576,6 +644,144 @@ export default function Home() {
                     </Flex>
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Character Swapper Modal */}
+      <AnimatePresence>
+        {characterSwapperOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50"
+              style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+              onClick={() => setCharacterSwapperOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-8"
+              onClick={() => setCharacterSwapperOpen(false)}
+            >
+              <div
+                className="relative w-full max-w-4xl overflow-hidden rounded-lg shadow-2xl border"
+                style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+                  <Flex justify="between" align="center">
+                    <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>
+                      Choose Your Trading Companion
+                    </Text>
+                    <button
+                      className="w-8 h-8 flex items-center justify-center rounded-lg"
+                      onClick={() => setCharacterSwapperOpen(false)}
+                    >
+                      <Text size="4">✕</Text>
+                    </button>
+                  </Flex>
+                </div>
+
+                {/* Character Grid */}
+                <div className="p-6">
+                  <div className="grid grid-cols-5 gap-4">
+                    {characters.map((character, index) => (
+                      <motion.div
+                        key={character.id}
+                        className="flex flex-col items-center cursor-pointer"
+                        whileHover={{ scale: 1.05 }}
+                        onClick={() => {
+                          setSelectedCharacter(character);
+                          setCharacterSwapperOpen(false);
+                        }}
+                      >
+                        <motion.div
+                          className="w-24 h-24 rounded-full border-4 overflow-hidden mb-3"
+                          style={{
+                            borderColor: selectedCharacter.id === character.id ? 'var(--blue-9)' : 'var(--slate-6)',
+                            background: 'var(--slate-4)'
+                          }}
+                          whileHover={{
+                            scale: 1.1,
+                            borderColor: 'var(--blue-8)'
+                          }}
+                        >
+                          <img
+                            src={character.image}
+                            alt={character.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback for missing images
+                              const target = e.target as HTMLImageElement;
+                              target.style.background = 'linear-gradient(135deg, var(--blue-9), var(--purple-9))';
+                              target.style.display = 'flex';
+                              target.style.alignItems = 'center';
+                              target.style.justifyContent = 'center';
+                              target.style.color = 'white';
+                              target.style.fontSize = '10px';
+                              target.src = 'data:image/svg+xml;base64,' + btoa(`
+                                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect width="48" height="48" rx="24" fill="url(#gradient)"/>
+                                  <text x="24" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold">${character.name.charAt(0)}</text>
+                                  <defs>
+                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" style="stop-color:#3b82f6"/>
+                                      <stop offset="100%" style="stop-color:#8b5cf6"/>
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+                              `);
+                            }}
+                          />
+                        </motion.div>
+                        <Text
+                          size="2"
+                          weight="medium"
+                          className="text-center"
+                          style={{
+                            color: selectedCharacter.id === character.id ? 'var(--blue-11)' : 'var(--slate-11)'
+                          }}
+                        >
+                          {character.name}
+                        </Text>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Landing Page Modal */}
+      <AnimatePresence>
+        {showLandingPage && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50"
+              style={{ background: 'rgba(0,0,0,0.9)' }}
+              onClick={() => setShowLandingPage(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50"
+              onClick={() => setShowLandingPage(false)}
+            >
+              <div onClick={(e) => e.stopPropagation()}>
+                <LandingPage onEnter={() => setShowLandingPage(false)} />
               </div>
             </motion.div>
           </>
