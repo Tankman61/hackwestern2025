@@ -308,6 +308,23 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   };
 
   useEffect(() => {
+    // Reset animation state when modelPath changes (new character selected)
+    if (initializedRef.current && modelPath !== (containerRef.current as any)?.dataset?.lastModel) {
+      console.log('🔄 Character changed to:', modelPath, '- resetting animation state');
+      initializedRef.current = false;
+      if (animationChainTimeoutRef.current) {
+        clearTimeout(animationChainTimeoutRef.current);
+        animationChainTimeoutRef.current = null;
+      }
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction();
+      }
+      currentActionRef.current = null;
+      currentChainRef.current = [];
+      currentChainIndexRef.current = 0;
+      setCurrentCategory(null);
+    }
+
     // Prevent duplicate initialization within this component instance
     if (initializedRef.current) {
       console.warn('⚠️ VRMViewerCompact already initialized for this instance, skipping...');
@@ -332,6 +349,11 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
       }
 
       initializedRef.current = true;
+
+    // Track the model that was loaded
+    if (containerRef.current) {
+      (containerRef.current as any).dataset.lastModel = modelPath;
+    }
 
       scene = new THREE.Scene();
       scene.background = null; // Transparent background

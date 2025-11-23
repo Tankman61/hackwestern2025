@@ -733,6 +733,7 @@ export default function Home() {
                         key={character.id}
                         className="cursor-pointer"
                         onClick={() => {
+                          console.log('🎭 Selecting character:', character.name);
                           setSelectedCharacter(character);
                           setCharacterSwapperOpen(false);
                         }}
