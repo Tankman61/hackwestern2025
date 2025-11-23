@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, PersonIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon } from "@radix-ui/react-icons";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
@@ -43,6 +43,7 @@ export default function Home() {
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [characterSwapperOpen, setCharacterSwapperOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(false);
   const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
   const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
@@ -67,8 +68,8 @@ export default function Home() {
   // Character data
   const characters = [
     { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm" },
-    { id: "character2", name: "Character 2", image: "/character2_profile.png", vrm: "/character2.vrm" },
-    { id: "character3", name: "Character 3", image: "/character3_profile.png", vrm: "/character3.vrm" },
+    { id: "twinkie", name: "Twinkie", image: "/twinkie_profile.png", vrm: "/twinkie.vrm" },
+    { id: "caring_mother", name: "Caring Mother", image: "/caring_mother_profile.png", vrm: "/caring_mother.vrm" },
     { id: "character4", name: "Character 4", image: "/character4_profile.png", vrm: "/character4.vrm" },
     { id: "character5", name: "Character 5", image: "/character5_profile.png", vrm: "/character5.vrm" },
   ];
@@ -222,17 +223,6 @@ export default function Home() {
           </div>
         </Flex>
 
-        {/* Character Swapper Button */}
-        <Button
-          onClick={() => setCharacterSwapperOpen(true)}
-          variant="soft"
-          color="blue"
-          size="2"
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <PersonIcon width="16" height="16" />
-          <Text size="2">{selectedCharacter.name}</Text>
-        </Button>
 
       </div>
 
@@ -309,6 +299,46 @@ export default function Home() {
                         onSceneClick={() => setAgentExpanded(!agentExpanded)}
                         modelPath={selectedCharacter.vrm}
                       />
+
+                      {/* Control Buttons */}
+                      <div className="absolute top-3 left-3 flex gap-2">
+                        {/* Mute/Unmute Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsMuted(!isMuted);
+                          }}
+                          className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
+                          style={{
+                            background: 'transparent',
+                            borderColor: 'var(--slate-6)',
+                            color: 'var(--slate-11)'
+                          }}
+                        >
+                          {isMuted ? (
+                            <SpeakerOffIcon width="18" height="18" />
+                          ) : (
+                            <SpeakerLoudIcon width="18" height="18" />
+                          )}
+                        </button>
+
+                        {/* Character Swap Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCharacterSwapperOpen(true);
+                          }}
+                          className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
+                          style={{
+                            background: 'transparent',
+                            borderColor: 'var(--slate-6)',
+                            color: 'var(--slate-11)'
+                          }}
+                        >
+                          <PersonIcon width="18" height="18" />
+                        </button>
+                      </div>
+
                       <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
                     </div>
                   </div>
@@ -659,7 +689,7 @@ export default function Home() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-50"
-              style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+              style={{ background: 'rgba(0,0,0,0.9)' }}
               onClick={() => setCharacterSwapperOpen(false)}
             />
             <motion.div
@@ -671,46 +701,53 @@ export default function Home() {
               onClick={() => setCharacterSwapperOpen(false)}
             >
               <div
-                className="relative w-full max-w-4xl overflow-hidden rounded-lg shadow-2xl border"
-                style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}
+                className="relative w-full h-[750px] overflow-hidden"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  boxShadow: 'none',
+                  maxWidth: '2000px' // Allow very wide modal for the huge characters
+                }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="p-6 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-                  <Flex justify="between" align="center">
-                    <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>
-                      Choose Your Trading Companion
-                    </Text>
+                    {/* Close button positioned absolutely */}
                     <button
-                      className="w-8 h-8 flex items-center justify-center rounded-lg"
+                      className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center rounded-full z-10 transition-all hover:scale-110"
+                      style={{
+                        background: 'rgba(0,0,0,0.7)',
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        color: 'white',
+                        backdropFilter: 'blur(4px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                      }}
                       onClick={() => setCharacterSwapperOpen(false)}
                     >
-                      <Text size="4">✕</Text>
+                      <Text size="5" style={{ fontWeight: 'bold', lineHeight: 1 }}>✕</Text>
                     </button>
-                  </Flex>
-                </div>
 
                 {/* Character Grid */}
-                <div className="p-6">
-                  <div className="grid grid-cols-5 gap-4">
+                <div className="flex justify-center items-center h-full">
+                  <div className="flex gap-2">
                     {characters.map((character, index) => (
                       <motion.div
                         key={character.id}
-                        className="flex flex-col items-center cursor-pointer"
-                        whileHover={{ scale: 1.05 }}
+                        className="cursor-pointer"
                         onClick={() => {
                           setSelectedCharacter(character);
                           setCharacterSwapperOpen(false);
                         }}
                       >
                         <motion.div
-                          className="w-24 h-24 rounded-full border-4 overflow-hidden mb-3"
+                          className="h-[700px] rounded-3xl overflow-hidden relative"
                           style={{
-                            borderColor: selectedCharacter.id === character.id ? 'var(--blue-9)' : 'var(--slate-6)',
-                            background: 'var(--slate-4)'
+                            width: '300px', // Double the width (150px -> 300px)
+                            background: 'rgba(0,0,0,0.3)', // Dark transparent background
+                            border: '4px solid rgba(255,255,255,0.4)', // Larger, more prominent border
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                           }}
                           whileHover={{
-                            scale: 1.1,
-                            borderColor: 'var(--blue-8)'
+                            width: '600px', // Double the width (300px -> 600px)
+                            transition: { duration: 0.3, ease: "easeOut" }
                           }}
                         >
                           <img
@@ -718,39 +755,42 @@ export default function Home() {
                             alt={character.name}
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                              // Fallback for missing images
+                              // Simple fallback - just show character initial
                               const target = e.target as HTMLImageElement;
                               target.style.background = 'linear-gradient(135deg, var(--blue-9), var(--purple-9))';
                               target.style.display = 'flex';
                               target.style.alignItems = 'center';
                               target.style.justifyContent = 'center';
                               target.style.color = 'white';
-                              target.style.fontSize = '10px';
-                              target.src = 'data:image/svg+xml;base64,' + btoa(`
-                                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="48" height="48" rx="24" fill="url(#gradient)"/>
-                                  <text x="24" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold">${character.name.charAt(0)}</text>
-                                  <defs>
-                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                      <stop offset="0%" style="stop-color:#3b82f6"/>
-                                      <stop offset="100%" style="stop-color:#8b5cf6"/>
-                                    </linearGradient>
-                                  </defs>
-                                </svg>
-                              `);
+                              target.style.fontSize = '48px';
+                              target.style.fontWeight = 'bold';
+                              target.textContent = character.name.charAt(0);
+                              target.src = '';
                             }}
                           />
+
+                          {/* Gradient fade overlay */}
+                          <div
+                            className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"
+                            style={{ pointerEvents: 'none' }}
+                          />
+
+                          {/* Text overlay at bottom */}
+                          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                            <h3 className="text-lg font-bold mb-1">{character.name}</h3>
+                            <p className="text-xs opacity-90">
+                              {character.id === 'horse_girl'
+                                ? 'A UWU Horse for a UWO Mascot'
+                                : character.id === 'twinkie'
+                                  ? 'The perfect snack'
+                                  : character.id === 'caring_mother'
+                                    ? 'Who\'s a good boy?'
+                                    : 'Trading companion with unique personality and insights.'
+                              }
+                            </p>
+                          </div>
+
                         </motion.div>
-                        <Text
-                          size="2"
-                          weight="medium"
-                          className="text-center"
-                          style={{
-                            color: selectedCharacter.id === character.id ? 'var(--blue-11)' : 'var(--slate-11)'
-                          }}
-                        >
-                          {character.name}
-                        </Text>
                       </motion.div>
                     ))}
                   </div>
