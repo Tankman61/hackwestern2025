@@ -35,8 +35,63 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   const [isPlayingTts, setIsPlayingTts] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Blinking animation state
+  const blinkStartTimeRef = useRef<number>(0);
+  const isBlinkingRef = useRef<boolean>(false);
+
   // Initialize lip sync hook
   useWawa({ vrm: vrmRef.current, audioElem: audioRef.current } as any);
+
+  // Blinking function using sine wave
+  const updateBlinking = useCallback(() => {
+    if (!vrmRef.current || viewMode !== 'landing') return;
+
+    const now = Date.now();
+    const timeSinceBlinkStart = now - blinkStartTimeRef.current;
+
+    // Blink every 3-5 seconds randomly
+    if (!isBlinkingRef.current && Math.random() < 0.005) {
+      isBlinkingRef.current = true;
+      blinkStartTimeRef.current = now;
+    }
+
+    if (isBlinkingRef.current) {
+      // Blink duration: 150ms
+      const blinkDuration = 150;
+      const progress = Math.min(timeSinceBlinkStart / blinkDuration, 1);
+
+      // Sine wave for smooth blink: sin(π * progress) creates smooth open->close->open
+      const blinkValue = Math.sin(Math.PI * progress);
+
+      // Apply blink to eye morph targets (common VRM blend shapes)
+      const blinkTargets = ['Blink', 'Blink_L', 'Blink_R', 'EyeBlink', 'eyeBlink'];
+
+      blinkTargets.forEach(targetName => {
+        if (vrmRef.current?.expressionManager) {
+          try {
+            vrmRef.current.expressionManager.setValue(targetName, blinkValue);
+          } catch (e) {
+            // Blend shape doesn't exist, skip
+          }
+        }
+      });
+
+      // End blink
+      if (progress >= 1) {
+        isBlinkingRef.current = false;
+        // Reset to open eyes
+        blinkTargets.forEach(targetName => {
+          if (vrmRef.current?.expressionManager) {
+            try {
+              vrmRef.current.expressionManager.setValue(targetName, 0);
+            } catch (e) {
+              // Blend shape doesn't exist, skip
+            }
+          }
+        });
+      }
+    }
+  }, [viewMode]);
 
   // Animation categories
   const animationCategories = {
@@ -572,6 +627,9 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         if (mixerRef.current) {
           mixerRef.current.update(dt);
         }
+
+        // Update blinking animation (landing page only)
+        updateBlinking();
 
         // Update VRM (physics for hair/clothes and bone updates)
         // This runs AFTER animation to ensure our rotations aren't overridden
