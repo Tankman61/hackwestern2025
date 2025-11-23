@@ -42,35 +42,86 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   const blinkStartTimeRef = useRef<number>(0);
   const isBlinkingRef = useRef<boolean>(false);
 
-  // Horse Girl animation monitoring
-  const horseGirlCheckRef = useRef<NodeJS.Timeout | null>(null);
+  // Animation monitoring for all characters
+  const animationMonitorRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize lip sync hook
   useWawa({ vrm: vrmRef.current, audioElem: audioRef.current } as any);
 
-  // Monitor Horse Girl animation status
+  // Create a basic breathing animation as ultimate fallback
+  const createBreathingAnimation = useCallback(() => {
+    if (!vrmRef.current || !mixerRef.current) return null;
+
+    try {
+      // Create a simple breathing animation by scaling the chest/hips slightly
+      const vrm = vrmRef.current;
+      const mixer = mixerRef.current;
+
+      // Create a simple keyframe animation for breathing
+      const breathingClip = new THREE.AnimationClip('breathing', 2, [
+        new THREE.VectorKeyframeTrack('.scale', [0, 1, 2], [1, 1, 1, 1.02, 1.02, 1.02, 1, 1, 1])
+      ]);
+
+      const breathingAction = mixer.clipAction(breathingClip);
+      breathingAction.setLoop(THREE.LoopRepeat, Infinity);
+      breathingAction.enabled = true;
+      breathingAction.setEffectiveTimeScale(0.5); // Slow breathing
+      breathingAction.setEffectiveWeight(0.1); // Very subtle
+
+      console.log('💨 Created breathing fallback animation');
+      return breathingAction;
+    } catch (error) {
+      console.error('Failed to create breathing animation:', error);
+      return null;
+    }
+  }, []);
+
+  // Monitor animation status for all characters
   useEffect(() => {
-    const isHorseGirl = modelPath.includes('horse_girl') && viewMode === 'dashboard';
+    const checkAnimationStatus = () => {
+      if (!vrmRef.current || !mixerRef.current) return;
 
-    if (!isHorseGirl) return;
+      const hasActiveAnimation = currentActionRef.current && currentActionRef.current.isRunning();
+      const timeSinceInit = Date.now() - (initializedRef.current ? 0 : Date.now());
 
-    const checkHorseGirlAnimation = () => {
-      if (vrmRef.current && mixerRef.current && !currentActionRef.current) {
-        console.log('🐴 Horse Girl detected as T-posing, restarting animations...');
-        playAnimationChain(getIdleAnimations());
+      // If no animation is running and we've been initialized for more than 5 seconds
+      if (!hasActiveAnimation && timeSinceInit > 5000 && viewMode === 'dashboard') {
+        console.log('🤖 Character detected as T-posing, forcing animation restart...');
+
+        // Try to restart animation chain first
+        if (!playAnimationChain(getIdleAnimations())) {
+          // If that fails, try breathing animation as last resort
+          setTimeout(() => {
+            if (!currentActionRef.current || !currentActionRef.current.isRunning()) {
+              console.log('🤖 Using breathing animation as final fallback');
+              const breathingAction = createBreathingAnimation();
+              if (breathingAction) {
+                // Stop any existing actions first
+                mixerRef.current?.stopAllAction();
+                breathingAction.reset();
+                breathingAction.play();
+                currentActionRef.current = breathingAction;
+              }
+            }
+          }, 2000);
+        }
       }
     };
 
-    // Check every 10 seconds if Horse Girl is animating
-    horseGirlCheckRef.current = setInterval(checkHorseGirlAnimation, 10000);
+    // Check every 8 seconds for any T-posing
+    animationMonitorRef.current = setInterval(checkAnimationStatus, 8000);
+
+    // Also check immediately after a short delay
+    const initialCheck = setTimeout(checkAnimationStatus, 3000);
 
     return () => {
-      if (horseGirlCheckRef.current) {
-        clearInterval(horseGirlCheckRef.current);
-        horseGirlCheckRef.current = null;
+      clearTimeout(initialCheck);
+      if (animationMonitorRef.current) {
+        clearInterval(animationMonitorRef.current);
+        animationMonitorRef.current = null;
       }
     };
-  }, [modelPath, viewMode]);
+  }, [modelPath, viewMode, createBreathingAnimation]);
 
   // Blinking function using sine wave
   const updateBlinking = useCallback(() => {
@@ -188,9 +239,16 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
       // Try horse animations first, then fallback to regular if they fail
       return [...horseAnimations, ...fallbackAnimations];
     } else {
-      // All other VRM models use regular idle adult animations
+      // All other VRM models use regular idle adult animations, with extra fallbacks
       console.log('🎬 Using regular idle adult animations for:', modelPath);
-      return animationCategories.regularIdleAdult;
+      const regularAnimations = animationCategories.regularIdleAdult;
+      // Add some variety by including a couple more animation types as backup
+      const backupAnimations = [
+        animationCategories.happy[0], // Joyful Jump
+        animationCategories.excited[0] // Victory Idle
+      ].filter(Boolean);
+
+      return [...regularAnimations, ...backupAnimations];
     }
   };
 
@@ -441,11 +499,37 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
           const isHorseGirl = modelPath.includes('horse_girl');
           if (isHorseGirl) {
             console.log('🐴 Horse Girl animation failed, trying fallback...');
+          } else {
+            console.log('🤖 General animation failed, trying next in chain...');
           }
+
+          // Count consecutive failures to detect if all animations are broken
+          if (!currentChainRef.current) return;
+
+          const currentIndex = currentChainIndexRef.current % currentChainRef.current.length;
+          const failureCount = (currentChainIndexRef.current - currentIndex) / currentChainRef.current.length;
+
+          if (failureCount > 2) {
+            console.warn('⚠️ Multiple animation failures detected, switching to emergency fallback');
+            // Force immediate breathing animation as emergency fallback
+            setTimeout(() => {
+              if (!currentActionRef.current || !currentActionRef.current.isRunning()) {
+                const breathingAction = createBreathingAnimation();
+                if (breathingAction) {
+                  mixerRef.current?.stopAllAction();
+                  breathingAction.reset();
+                  breathingAction.play();
+                  currentActionRef.current = breathingAction;
+                }
+              }
+            }, 500);
+            return;
+          }
+
           // Try next animation after a delay
           animationChainTimeoutRef.current = setTimeout(() => {
             playNextInChain();
-          }, 2000); // Reduced delay for faster fallback
+          }, 1500); // Even faster fallback
         }
       );
     };
@@ -715,6 +799,17 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
                     setTimeout(() => {
                       if (!startAnimations()) {
                         console.error('❌ Failed to start animations after multiple attempts');
+                        // Emergency fallback: breathing animation
+                        setTimeout(() => {
+                          console.log('🚨 Emergency breathing animation fallback');
+                          const breathingAction = createBreathingAnimation();
+                          if (breathingAction) {
+                            mixerRef.current?.stopAllAction();
+                            breathingAction.reset();
+                            breathingAction.play();
+                            currentActionRef.current = breathingAction;
+                          }
+                        }, 1000);
                       }
                     }, 500);
                   }
