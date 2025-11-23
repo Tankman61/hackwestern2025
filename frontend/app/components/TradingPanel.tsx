@@ -35,13 +35,14 @@ export default function TradingPanel({
   riskScore
 }: TradingPanelProps) {
   return (
-    <div className="flex flex-col border-r overflow-hidden" style={{ 
-      background: 'var(--slate-3)', 
+    <div className="flex flex-col border-r overflow-hidden" style={{
+      background: 'var(--slate-3)',
       borderColor: 'var(--slate-6)',
-      height: '800px',
+      height: '100%',
       minHeight: 0,
       position: 'relative',
-      zIndex: 10
+      zIndex: 10,
+      width: '17.5rem'
     }}>
       {activeTradingTab === "risk" && <RiskMonitorTab />}
       {activeTradingTab === "trade" && (

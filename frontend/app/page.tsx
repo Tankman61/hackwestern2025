@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
@@ -42,7 +42,7 @@ export default function Home() {
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
+  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("risk");
   const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
   const [riskScore, setRiskScore] = useState<number>(0);
@@ -62,6 +62,7 @@ export default function Home() {
   const [activePortfolio, setActivePortfolio] = useState<PortfolioView>(null);
   const [activeHoldings, setActiveHoldings] = useState<HoldingsView>(null);
   const [homeResetKey, setHomeResetKey] = useState(0);
+  const [navbarHolding, setNavbarHolding] = useState<{ symbol: string; name: string } | null>(null);
 
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
@@ -111,6 +112,17 @@ export default function Home() {
     onMessage: handlePriceMessage,
     autoConnect: true,
   });
+
+  // Listen for holding selection events from CryptoHoldings component
+  useEffect(() => {
+    const handleHoldingSelected = (event: CustomEvent<{ symbol: string; name: string } | null>) => {
+      setNavbarHolding(event.detail);
+    };
+    window.addEventListener('holdingSelectedForNavbar', handleHoldingSelected as EventListener);
+    return () => {
+      window.removeEventListener('holdingSelectedForNavbar', handleHoldingSelected as EventListener);
+    };
+  }, []);
 
   // Fetch risk level from risk monitor (price comes from WebSocket)
   useEffect(() => {
@@ -222,9 +234,35 @@ export default function Home() {
       {/* Top Bar */}
       <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
-          <div className="flex items-center gap-1.5">
+          {navbarHolding && (
+            <div>
+              <Text size="6" weight="bold" style={{ color: 'var(--slate-12)' }}>
+                {navbarHolding.symbol}
+              </Text>
+              <Text size="2" className="block" style={{ color: 'var(--slate-11)' }}>
+                {navbarHolding.name}
+              </Text>
+            </div>
+          )}
+        </Flex>
+        <Flex align="center" gap="3">
+          <div className="flex items-center gap-3">
+            {navbarHolding && (
+              <Button
+                variant="soft"
+                onClick={() => {
+                  const event = new CustomEvent('returnToHoldings');
+                  window.dispatchEvent(event);
+                }}
+                style={{ cursor: 'pointer', marginRight: '1rem' }}
+              >
+                <ArrowLeftIcon /> Return
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5" style={{ minWidth: '140px' }}>
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green-9)' }}></div>
-            <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)' }}>
+            <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)', whiteSpace: 'nowrap' }}>
               {currentTime || "00:00:00"} UTC
             </Text>
           </div>
@@ -253,51 +291,63 @@ export default function Home() {
         }}
       />
 
-      <div className="grid h-[calc(100vh-3rem)] gap-0" style={{
-        gridTemplateColumns: tradingPanelOpen ? '1fr 280px 40px' : '1fr 40px',
-        gridTemplateRows: '1fr'
-      }}>
+      <div className="flex h-[calc(100vh-3rem)] gap-0">
         {/* LEFT COLUMN */}
-        <div className="flex flex-col">
-          {activePortfolio === null && activeHoldings === null ? (
-            <>
-              {/* Crypto Holdings Dashboard */}
-              <div className="flex-1 border-r overflow-hidden" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-                <CryptoHoldingsDashboard 
-                  key={homeResetKey}
-                  resetFilter={homeResetKey > 0}
-                  onHoldingClick={(holding) => {
-                    // Navigate to the appropriate holdings view based on type
-                    const holdingsViewMap: Record<string, HoldingsView> = {
-                      crypto: "crypto-holdings",
-                      stocks: "stocks-holdings",
-                      options: "options-holdings",
-                      etfs: "etfs-holdings"
-                    };
-                    const holdingsView = holdingsViewMap[holding.type];
-                    if (holdingsView) {
-                      setActiveHoldings(holdingsView);
-                      // Store the holding to select in the holdings component
-                      // We'll need to pass this through props or context
-                      setTimeout(() => {
-                        // Use a small delay to ensure the component is mounted
-                        const event = new CustomEvent('selectHolding', { detail: holding });
-                        window.dispatchEvent(event);
-                      }, 100);
-                    }
-                  }}
-                />
-              </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Main Content Area - scrollable */}
+          <div className="flex-1 border-r overflow-hidden min-h-0" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+            {activePortfolio === null && activeHoldings === null ? (
+              <CryptoHoldingsDashboard
+                key={homeResetKey}
+                resetFilter={homeResetKey > 0}
+                onHoldingClick={(holding) => {
+                  // Navigate to the appropriate holdings view based on type
+                  const holdingsViewMap: Record<string, HoldingsView> = {
+                    crypto: "crypto-holdings",
+                    stocks: "stocks-holdings",
+                    options: "options-holdings",
+                    etfs: "etfs-holdings"
+                  };
+                  const holdingsView = holdingsViewMap[holding.type];
+                  if (holdingsView) {
+                    setActiveHoldings(holdingsView);
+                    // Store the holding to select in the holdings component
+                    // We'll need to pass this through props or context
+                    setTimeout(() => {
+                      // Use a small delay to ensure the component is mounted
+                      const event = new CustomEvent('selectHolding', { detail: holding });
+                      window.dispatchEvent(event);
+                    }, 100);
+                  }
+                }}
+              />
+            ) : activePortfolio !== null ? (
+              <>
+                {activePortfolio === "crypto" && <CryptoPortfolio />}
+                {activePortfolio === "stocks" && <StocksPortfolio />}
+                {activePortfolio === "options" && <OptionsPortfolio />}
+                {activePortfolio === "etfs" && <ETFsPortfolio />}
+              </>
+            ) : (
+              <>
+                {activeHoldings === "crypto-holdings" && <CryptoHoldings onReturn={() => setActiveHoldings(null)} />}
+                {activeHoldings === "stocks-holdings" && <StocksHoldings />}
+                {activeHoldings === "options-holdings" && <OptionsHoldings />}
+                {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
+              </>
+            )}
+          </div>
 
-              {/* Bottom Data Panels */}
-              <div className="h-96 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
+          {/* Bottom Data Panels - REMOVED - taking up too much space */}
+          {false && (
+            <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
                 {/* VTuber Profile Card */}
                 <div
-                  className="border-r cursor-pointer flex items-center justify-center"
-                  style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
+                  className="shrink-0 border-r cursor-pointer flex items-center justify-center"
+                  style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '16rem', height: '16rem' }}
                   onClick={() => setAgentExpanded(!agentExpanded)}
                 >
-                  <div className="w-[200px] h-[200px] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
+                  <div className="w-[12.5rem] h-[12.5rem] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
                     <span className="relative z-10">🎯</span>
                     <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
@@ -305,12 +355,14 @@ export default function Home() {
                 </div>
 
                 {/* Polymarket Panel - Using Component */}
-                <PolymarketPanel />
+                <div className="flex-1 min-w-0">
+                  <PolymarketPanel />
+                </div>
 
                 {/* Social Sentiment Panel */}
                 <div
-                  className="p-3 flex flex-col cursor-pointer"
-                  style={{ background: 'var(--slate-2)' }}
+                  className="flex-1 p-3 flex flex-col cursor-pointer min-w-0"
+                  style={{ background: 'var(--slate-2)', height: '16rem' }}
                   onClick={() => setSentimentExpanded(!sentimentExpanded)}
                 >
                   <Flex justify="between" align="center" className="mb-2">
@@ -440,22 +492,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-              </div>
-            </>
-          ) : activePortfolio !== null ? (
-            <>
-              {activePortfolio === "crypto" && <CryptoPortfolio />}
-              {activePortfolio === "stocks" && <StocksPortfolio />}
-              {activePortfolio === "options" && <OptionsPortfolio />}
-              {activePortfolio === "etfs" && <ETFsPortfolio />}
-            </>
-          ) : (
-            <>
-              {activeHoldings === "crypto-holdings" && <CryptoHoldings onReturn={() => setActiveHoldings(null)} />}
-              {activeHoldings === "stocks-holdings" && <StocksHoldings />}
-              {activeHoldings === "options-holdings" && <OptionsHoldings />}
-              {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
-            </>
+            </div>
           )}
         </div>
 

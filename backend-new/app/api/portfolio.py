@@ -41,14 +41,28 @@ async def get_portfolio():
     if not trading_service.is_enabled():
         raise HTTPException(status_code=503, detail="Trading service not enabled")
 
-
-    account = await trading_service.get_account()
-    print("ACCOUNT IS:", account)
-    if not account:
-        raise HTTPException(status_code=500, detail="Failed to fetch Alpaca account")
-  
+    # Try to get account info, but handle errors gracefully
+    account = None
+    try:
+        account = await trading_service.get_account()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to fetch Alpaca account: {e}")
 
     lock_state = _get_lock_state()
+
+    # If account fetch failed, return default values
+    if not account:
+        return {
+            "balance_usd": 0.0,
+            "total_value": 0.0,
+            "pnl_total": 0.0,
+            "pnl_percent": 0.0,
+            "is_locked": lock_state.get("is_locked", False),
+            "lock_reason": lock_state.get("lock_reason"),
+            "lock_expires_at": lock_state.get("lock_expires_at"),
+            "error": "Unable to fetch account data from Alpaca"
+        }
 
     balance = float(account.get("cash", 0))
     portfolio_value = float(account.get("portfolio_value", balance))
@@ -91,14 +105,28 @@ async def get_positions():
         )
 
         formatted.append({
-            "id": pos["symbol"],
-            "ticker": symbol,
+            # Keep full Alpaca position data for frontend compatibility
+            "asset_id": pos["asset_id"],
+            "symbol": pos["symbol"],
+            "exchange": pos.get("exchange"),
+            "asset_class": pos["asset_class"],
+            "avg_entry_price": entry_price,
+            "qty": float(pos["qty"]),
+            "qty_available": pos.get("qty_available", float(pos["qty"])),
             "side": pos["side"],
-            "amount": float(pos["qty"]),
-            "entry_price": entry_price,
+            "market_value": pos["market_value"],
+            "cost_basis": pos["cost_basis"],
+            "unrealized_pl": pos["unrealized_pl"],
+            "unrealized_plpc": pos["unrealized_plpc"],
+            "unrealized_intraday_pl": pos.get("unrealized_intraday_pl", 0),
+            "unrealized_intraday_plpc": pos.get("unrealized_intraday_plpc", 0),
             "current_price": float(live_price or entry_price),
-            "pnl": round(pnl["pnl"], 2),
-            "pnl_percent": round(pnl["pnl_percent"], 2)
+            "lastday_price": pos.get("lastday_price", entry_price),
+            "change_today": pos.get("change_today", 0),
+            # Add calculated fields with live price
+            "live_price": float(live_price) if live_price else None,
+            "live_pnl": round(pnl["pnl"], 2),
+            "live_pnl_percent": round(pnl["pnl_percent"], 2)
         })
 
     return formatted

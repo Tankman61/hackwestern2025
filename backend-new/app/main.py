@@ -141,12 +141,21 @@ async def root():
 
 @app.get("/health")
 async def health():
-    account = await trading_service.get_account() if trading_service.is_enabled() else None
-    
+    # Get account info safely
+    account = None
+    account_value = None
+    try:
+        if trading_service.is_enabled():
+            account = await trading_service.get_account()
+            if account:
+                account_value = float(account.get("portfolio_value", 0))
+    except Exception as e:
+        logger.warning(f"Failed to get account info in health check: {e}")
+
     # Check if Finnhub API key is configured
     finnhub_configured = finnhub_service.api_key is not None
     finnhub_connected = finnhub_service.ws is not None and finnhub_service._running
-    
+
     return {
         "status": "healthy",
         "finnhub_market_data": {
@@ -161,7 +170,7 @@ async def health():
         "alpaca_trading": {
             "enabled": trading_service.is_enabled(),
             "paper_trading": trading_service.paper if trading_service.is_enabled() else None,
-            "account_value": float(account["portfolio_value"]) if account else None,
+            "account_value": account_value,
             "note": "Alpaca used only for trading execution"
         }
     }

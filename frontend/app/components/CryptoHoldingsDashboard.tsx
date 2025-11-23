@@ -34,6 +34,9 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
   const hasInitialDataRef = useRef(false);
   const [localPrice, setLocalPrice] = useState<number | null>(currentPrice);
   const [localConnected, setLocalConnected] = useState(isConnected);
+  const [showLoadingText, setShowLoadingText] = useState(true);
+  const lastSignalTimeRef = useRef<number>(Date.now());
+  const [showConnected, setShowConnected] = useState(false);
 
   // Normalize symbol for comparison
   const normalizeSymbol = (s: string): string => {
@@ -52,10 +55,12 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       const barData = message.data;
       const messageSymbol = normalizeSymbol(barData.symbol);
       const holdingSymbol = normalizeSymbol(holding.symbol);
-      
+
       if (messageSymbol === holdingSymbol || barData.symbol === holding.symbol) {
+        setLocalConnected(true); // Mark as connected when receiving data
         setLocalPrice(barData.close);
-        
+        lastSignalTimeRef.current = Date.now(); // Update signal time on every bar
+
         if (seriesRef.current) {
           const chartData = transformBarToChartData(barData);
           
@@ -93,13 +98,34 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
     autoConnect: holding.type === "crypto" && (holding.symbol === "BTC" || holding.symbol?.includes("BTC")),
   });
 
+  // Check if 10 seconds have passed since last signal
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() - lastSignalTimeRef.current > 10000) {
+        setShowConnected(false);
+      } else {
+        setShowConnected(true);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Update local state when props change
   useEffect(() => {
     if (currentPrice !== null) {
       setLocalPrice(currentPrice);
     }
     setLocalConnected(isConnected);
-  }, [currentPrice, isConnected]);
+
+    // Hide "Loading..." text after 10 seconds if no data
+    const timeout = setTimeout(() => {
+      if (!localPrice) {
+        setShowLoadingText(false);
+      }
+    }, 10000);
+
+    return () => clearTimeout(timeout);
+  }, [currentPrice, isConnected, localPrice]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -124,6 +150,8 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       leftPriceScale: {
         visible: false,
       },
+      handleScroll: false,
+      handleScale: false,
       autoSize: true,
     });
 
@@ -172,38 +200,39 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
   const priceChangePercent = displayPrice ? (priceChange / avgPriceNum) * 100 : 0;
 
   return (
-    <div 
+    <div
       className="border rounded-lg flex flex-col cursor-pointer hover:border-blue-500 transition-colors"
-      style={{ 
-        background: 'var(--slate-2)', 
+      style={{
+        background: 'var(--slate-2)',
         borderColor: 'var(--slate-6)',
-        minHeight: 'min(25vh, 200px)',
-        padding: 'clamp(0.75rem, 1.5vw, 1rem)'
+        height: '280px',
+        maxWidth: '380px',
+        padding: '0.75rem'
       }}
       onClick={onClick}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>
+      <div className="flex items-center justify-between mb-2 shrink-0">
+        <div className="flex items-baseline gap-2 overflow-hidden">
+          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)', whiteSpace: 'nowrap' }}>
             {holding.symbol}
           </Text>
-          <Text size="2" style={{ color: 'var(--slate-11)' }}>
+          <Text size="2" style={{ color: 'var(--slate-11)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {holding.name}
           </Text>
         </div>
-        <div className={`h-2 w-2 rounded-full ${localConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`h-2 w-2 rounded-full shrink-0 ${showConnected ? 'bg-green-500' : 'bg-red-500'}`} />
       </div>
 
       {/* Price Info */}
-      <div className="mb-2">
+      <div className="mb-2 shrink-0">
         <Text size="3" weight="bold" style={{ color: localPrice ? 'var(--slate-12)' : 'var(--slate-11)' }}>
-          {localPrice ? `$${localPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Loading...'}
+          {localPrice ? `$${localPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (showLoadingText ? 'Loading...' : '')}
         </Text>
         {localPrice && (
-          <Text 
-            size="2" 
-            style={{ 
+          <Text
+            size="2"
+            style={{
               color: priceChange >= 0 ? 'var(--green-11)' : 'var(--red-11)',
               marginLeft: '8px'
             }}
@@ -214,10 +243,10 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       </div>
 
       {/* Mini Chart */}
-      <div ref={chartContainerRef} className="flex-1" style={{ minHeight: 'min(15vh, 120px)', height: 'min(15vh, 120px)', marginTop: 'clamp(0.5rem, 1vw, 0.5rem)' }} />
+      <div ref={chartContainerRef} className="flex-1 min-h-0" />
 
       {/* Holdings Info */}
-      <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--slate-6)' }}>
+      <div className="mt-2 pt-2 border-t shrink-0" style={{ borderColor: 'var(--slate-6)' }}>
         <div className="flex justify-between text-xs" style={{ color: 'var(--slate-11)' }}>
           <span>Qty: {holding.quantity}</span>
           <span>Value: ${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -271,9 +300,11 @@ export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }:
     : allHoldings.filter(h => h.type === filter);
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto" style={{ background: 'var(--slate-2)' }}>
-      {/* Dropdown Filter */}
-      <div className="mb-6">
+    <div className="h-full w-full flex flex-col overflow-hidden" style={{ background: 'var(--slate-2)' }}>
+      {/* Scrollable content area */}
+      <div className="flex-1 p-6 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Dropdown Filter */}
+        <div className="mb-6">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <button
@@ -282,38 +313,43 @@ export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }:
                 background: 'var(--slate-3)',
                 borderColor: 'var(--slate-6)',
                 color: 'var(--slate-12)',
-                padding: 'clamp(0.5rem, 1vw, 0.75rem) clamp(1rem, 2vw, 1.5rem)',
-                gap: 'clamp(0.25rem, 0.5vw, 0.5rem)',
-                fontSize: 'clamp(0.875rem, 1.25vw, 1rem)',
+                padding: '0.375rem 0.75rem',
+                gap: '0.25rem',
+                fontSize: '0.75rem',
+                minWidth: '9rem',
+                justifyContent: 'space-between'
               }}
             >
-              <Text size="3" weight="medium" style={{ fontSize: 'clamp(0.875rem, 1.25vw, 1rem)' }}>
-                Holding
+              <Text size="2" weight="medium" style={{ fontSize: '0.75rem' }}>
+                {filter === "all" ? "All Holdings" :
+                 filter === "crypto" ? "Crypto Holdings" :
+                 filter === "stocks" ? "Stock Holdings" :
+                 filter === "options" ? "Option Holdings" :
+                 "ETF Holdings"}
               </Text>
-              <ChevronDownIcon style={{ width: 'clamp(0.875rem, 1.25vw, 1rem)', height: 'clamp(0.875rem, 1.25vw, 1rem)' }} />
+              <ChevronDownIcon style={{ width: '0.75rem', height: '0.75rem' }} />
             </button>
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={() => setFilter("all")}>
+          <DropdownMenu.Content style={{ minWidth: '9rem' }}>
+            <DropdownMenu.Item onSelect={() => setFilter("all")} style={{ fontSize: '0.75rem' }}>
               All Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("crypto")}>
+            <DropdownMenu.Item onSelect={() => setFilter("crypto")} style={{ fontSize: '0.75rem' }}>
               Crypto Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("stocks")}>
+            <DropdownMenu.Item onSelect={() => setFilter("stocks")} style={{ fontSize: '0.75rem' }}>
               Stock Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("options")}>
+            <DropdownMenu.Item onSelect={() => setFilter("options")} style={{ fontSize: '0.75rem' }}>
               Option Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("etfs")}>
+            <DropdownMenu.Item onSelect={() => setFilter("etfs")} style={{ fontSize: '0.75rem' }}>
               ETF Holdings
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-      </div>
-      
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
           {filteredHoldings.map((holding) => (
             <HoldingCard

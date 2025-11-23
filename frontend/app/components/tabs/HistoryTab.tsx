@@ -86,10 +86,10 @@ export default function HistoryTab() {
             {history.map((trade) => (
               <div
                 key={trade.id}
-                className="p-2.5 border-l-2 rounded"
+                className="p-2.5 rounded border"
                 style={{
                   background: 'var(--slate-3)',
-                  borderColor: trade.pnl >= 0 ? 'var(--green-9)' : 'var(--red-9)'
+                  borderColor: 'var(--slate-6)'
                 }}
               >
                 <Flex justify="between" align="center" className="mb-1">

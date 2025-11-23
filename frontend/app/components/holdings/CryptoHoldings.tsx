@@ -74,11 +74,44 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
       window.removeEventListener('selectHolding', handleSelectHolding as EventListener);
     };
   }, []);
+
+  // Listen for return to holdings event from navbar
+  useEffect(() => {
+    const handleReturn = () => {
+      setSelectedHolding(null);
+      // Scroll to top when returning to holdings
+      setTimeout(() => {
+        const scrollableDiv = document.querySelector('.overflow-y-auto');
+        if (scrollableDiv) {
+          scrollableDiv.scrollTop = 0;
+        }
+      }, 100);
+    };
+    window.addEventListener('returnToHoldings', handleReturn);
+    return () => {
+      window.removeEventListener('returnToHoldings', handleReturn);
+    };
+  }, []);
+
+  // Emit event when selectedHolding changes to update navbar
+  useEffect(() => {
+    if (selectedHolding) {
+      const event = new CustomEvent('holdingSelectedForNavbar', {
+        detail: { symbol: selectedHolding.symbol, name: selectedHolding.name }
+      });
+      window.dispatchEvent(event);
+    } else {
+      const event = new CustomEvent('holdingSelectedForNavbar', { detail: null });
+      window.dispatchEvent(event);
+    }
+  }, [selectedHolding]);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<any> | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const lastSignalTimeRef = useRef<number>(Date.now());
+  const [showConnected, setShowConnected] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("candlestick");
   const [timeFrame, setTimeFrame] = useState<TimeFrame>("1m");
   const [zoomLevel, setZoomLevel] = useState<number>(1); // 1 = fit all, higher = zoomed in
@@ -141,6 +174,19 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
   useEffect(() => {
     setSentimentExpanded(false);
   }, [selectedSubreddit]);
+
+  // Check if 10 seconds have passed since last signal
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() - lastSignalTimeRef.current > 10000) {
+        setShowConnected(false);
+      } else {
+        setShowConnected(true);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const dataPointsRef = useRef<Array<{ time: number; open: number; high: number; low: number; close: number; volume?: number }>>([]);
   const hasInitialDataRef = useRef(false);
 
@@ -276,7 +322,8 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
       if (isBTC && holdingIsBTC) {
         // console.log(`📊 BTC received bar:`, barData);
         setCurrentPrice(barData.close);
-        
+        lastSignalTimeRef.current = Date.now(); // Update signal time on every bar
+
         // Update chart with new data
         if (seriesRef.current && chartRef.current) {
           // console.log(`📈 Updating chart with bar data, chartType: ${chartType}`);
@@ -498,7 +545,7 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
         timeVisible: true,
         secondsVisible: false,
       },
-      autoSize: true,
+      autoSize: false,
     });
 
     chartRef.current = chart;
@@ -774,55 +821,29 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
 
   if (selectedHolding) {
     return (
-      <div className="h-full w-full overflow-y-auto" style={{ background: 'var(--slate-1)' }}>
-        {/* Header with Back Button */}
-        <div className="border-b px-6 py-4" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-          <Flex align="center" gap="3">
-            <Button
-              variant="soft"
-              onClick={() => {
-                if (onReturn) {
-                  onReturn();
-                } else {
-                  setSelectedHolding(null);
-                }
-              }}
-              style={{ cursor: 'pointer' }}
-            >
-              <ArrowLeftIcon /> Return
-            </Button>
-            <div>
-              <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
-                {selectedHolding.symbol}
-              </Text>
-              <Text size="3" className="block" style={{ color: 'var(--slate-11)' }}>
-                {selectedHolding.name}
-              </Text>
-            </div>
-          </Flex>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 p-4 md:p-6 border-b" style={{ borderColor: 'var(--slate-6)', padding: 'clamp(1rem, 2vw, 1.5rem)', gap: 'clamp(0.5rem, 1vw, 1rem)' }}>
+      <div className="h-full w-full flex flex-col overflow-hidden" style={{ background: 'var(--slate-1)' }}>
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
           <div>
-            <Text size="2" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Quantity</Text>
-            <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedHolding.quantity}</Text>
+            <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Quantity</Text>
+            <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedHolding.quantity}</Text>
           </div>
           <div>
-            <Text size="2" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Avg Price</Text>
-            <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>${selectedHolding.avgPrice}</Text>
+            <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Avg Price</Text>
+            <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>${selectedHolding.avgPrice}</Text>
           </div>
           <div>
-            <Text size="2" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Current Price</Text>
-            <Text size="5" weight="bold" style={{ color: currentPrice ? 'var(--green-11)' : 'var(--slate-11)' }}>
+            <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Current Price</Text>
+            <Text size="4" weight="bold" style={{ color: currentPrice ? 'var(--green-11)' : 'var(--slate-11)' }}>
               {currentPrice ? `$${currentPrice.toLocaleString()}` : 'Loading...'}
             </Text>
-            {isConnected && <Text size="1" style={{ color: 'var(--green-11)' }}>● Live</Text>}
           </div>
           <div>
-            <Text size="2" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Total Value</Text>
-            <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>
-              ${currentPrice 
+            <Text size="1" className="mb-1 block" style={{ color: 'var(--slate-11)' }}>Total Value</Text>
+            <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>
+              ${currentPrice
                 ? (parseFloat(selectedHolding.quantity.replace(/,/g, '')) * currentPrice).toLocaleString()
                 : (parseFloat(selectedHolding.quantity.replace(/,/g, '')) * parseFloat(selectedHolding.avgPrice.replace(/,/g, '')) * 1.15).toLocaleString()
               }
@@ -831,8 +852,8 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
         </div>
 
         {/* Chart */}
-        <div className="p-4 md:p-6" style={{ padding: 'clamp(1rem, 2vw, 1.5rem)' }}>
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between mb-3">
             <Text size="3" weight="bold" style={{ color: 'var(--slate-12)' }}>
               Live Price Chart
             </Text>
@@ -840,17 +861,17 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
               <div
                 className="h-2 w-2 rounded-full"
                 style={{
-                  backgroundColor: isConnected ? "var(--green-9)" : "var(--red-9)",
+                  backgroundColor: "var(--green-9)",
                 }}
               />
               <Text size="2" style={{ color: 'var(--slate-11)' }}>
-                {isConnected ? 'Live' : 'Connecting...'}
+                Live
               </Text>
             </div>
           </div>
           <div ref={chartContainerRef} className="w-full mb-4" style={{ minHeight: 'min(40vh, 500px)', height: 'min(40vh, 500px)' }} />
-          
-          {/* Chart Controls - Single Line */}
+
+          {/* Chart Controls */}
           <div className="flex flex-wrap items-center gap-1 mb-4" style={{ gap: '0.25rem' }}>
             {/* Chart Type */}
             <div className="flex items-center gap-1" style={{ gap: '0.125rem' }}>
@@ -989,9 +1010,10 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
             </div>
           </div>
         </div>
+        </div>
 
-        {/* Bottom Data Panels - Match main page layout */}
-        <div className="h-96 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
+        {/* Bottom Data Panels - FIXED at bottom */}
+        <div className="shrink-0 border-t grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)', height: '16rem' }}>
             {/* VTuber Profile Card - Match main page */}
             <div
               className="border-r cursor-pointer flex items-center justify-center"
@@ -1015,7 +1037,7 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
               onClick={() => setSentimentExpanded(!sentimentExpanded)}
             >
               <Flex justify="between" align="center" className="mb-2">
-                <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+                <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-12)' }}>
                   Social Sentiment
                 </Text>
                     <DropdownMenu.Root

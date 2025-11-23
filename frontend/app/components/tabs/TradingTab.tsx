@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flex, Text, Button } from "@radix-ui/themes";
+import { Flex, Text, Button, Badge } from "@radix-ui/themes";
 import { api } from "@/app/lib/api";
 import { toast } from "react-hot-toast";
 
@@ -289,12 +289,17 @@ export default function TradingTab({
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0, paddingBottom: '0.5rem' }}>
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 16rem)' }}>
       {/* Position Size */}
       <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-        <Text size="1" className="uppercase tracking-wider mb-2 block" style={{ color: 'var(--slate-11)' }}>
-          Size
-        </Text>
+        <Flex justify="between" align="center" className="mb-2">
+          <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+            Size
+          </Text>
+          <Badge size="1" style={{ background: 'var(--purple-4)', color: 'var(--purple-11)', fontSize: '0.65rem' }}>
+            AI suggestion: 0.5
+          </Badge>
+        </Flex>
         <input
           type="text"
           value={positionSize}
@@ -338,9 +343,14 @@ export default function TradingTab({
 
       {/* Stop Loss */}
       <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-        <Text size="1" className="uppercase tracking-wider mb-2 block" style={{ color: 'var(--slate-11)' }}>
-          Stop Loss
-        </Text>
+        <Flex justify="between" align="center" className="mb-2">
+          <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+            Stop Loss
+          </Text>
+          <Badge size="1" style={{ background: 'var(--purple-4)', color: 'var(--purple-11)', fontSize: '0.65rem' }}>
+            AI suggestion: 85,000
+          </Badge>
+        </Flex>
         <input
           type="text"
           value={stopLoss}
@@ -357,10 +367,15 @@ export default function TradingTab({
       </div>
 
       {/* Take Profit */}
-      <div className="p-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-        <Text size="1" className="uppercase tracking-wider mb-2 block" style={{ color: 'var(--slate-11)' }}>
-          Take Profit
-        </Text>
+      <div className="p-3" style={{ borderColor: 'var(--slate-6)' }}>
+        <Flex justify="between" align="center" className="mb-2">
+          <Text size="1" className="uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+            Take Profit
+          </Text>
+          <Badge size="1" style={{ background: 'var(--purple-4)', color: 'var(--purple-11)', fontSize: '0.65rem' }}>
+            AI suggestion: 95,000
+          </Badge>
+        </Flex>
         <input
           type="text"
           value={takeProfit}
@@ -378,16 +393,12 @@ export default function TradingTab({
       </div>
 
       {/* Execute Trade Button - Always visible at bottom */}
-      <div className="shrink-0 border-t" style={{ 
+      <div className="shrink-0 border-t" style={{
         borderColor: 'var(--slate-6)',
-        marginTop: 'auto',
         flexShrink: 0,
-        position: 'sticky',
-        bottom: 0,
-        zIndex: 20,
         background: 'var(--slate-3)',
         padding: '0.75rem',
-        paddingBottom: '0.5rem'
+        paddingBottom: '1rem'
       }}>
         <Button
           size="3"
@@ -417,21 +428,21 @@ export default function TradingTab({
             : currentPrice === "0" || currentPrice === "0.00"
               ? "Waiting for Price..."
               : tradeType === "long"
-                ? "🔼 Place Long Order"
-                : "🔽 Place Short Order"}
+                ? "Place Long Order"
+                : "Place Short Order"}
         </Button>
-        <Flex justify="center" align="center" gap="1" className="mt-2">
-          <div 
-            className="w-1 h-1 rounded-full" 
-            style={{ 
-              background: riskLevel === "high" ? 'var(--red-9)' : riskLevel === "medium" ? 'var(--yellow-9)' : 'var(--green-9)' 
+        <Flex justify="center" align="start" gap="1" className="mt-4">
+          <div
+            className="w-1 h-1 rounded-full"
+            style={{
+              background: riskLevel === "high" ? 'var(--red-9)' : riskLevel === "medium" ? 'var(--yellow-9)' : 'var(--green-9)'
             }}
           ></div>
-          <Text size="1" style={{ color: 'var(--slate-11)', fontSize: '0.7rem' }}>
+          <Text size="1" style={{ color: 'var(--slate-11)', fontSize: '0.65rem' }}>
             Risk: {riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low"} ({riskScore}/100)
           </Text>
         </Flex>
-        <Text size="1" style={{ color: 'var(--slate-10)', textAlign: 'center', fontSize: '0.65rem' }} className="mt-1">
+        <Text size="1" style={{ color: 'var(--slate-10)', textAlign: 'center', fontSize: '0.6rem' }} className="mt-1">
           Orders execute via Alpaca Paper Trading
         </Text>
       </div>
