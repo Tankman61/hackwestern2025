@@ -308,6 +308,8 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
   };
 
   useEffect(() => {
+    console.log('🎭 VRMViewerCompact mounting/remounting for viewMode:', viewMode, 'modelPath:', modelPath);
+
     // Reset animation state when modelPath changes (new character selected)
     if (initializedRef.current && modelPath !== (containerRef.current as any)?.dataset?.lastModel) {
       console.log('🔄 Character changed to:', modelPath, '- resetting animation state');
@@ -489,9 +491,12 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
               // Start idle animation chain after a brief delay to ensure everything is ready
               setTimeout(() => {
                 if (vrmRef.current && mixerRef.current) {
+                  console.log('🎬 Starting idle animations for dashboard view');
                   playAnimationChain(animationCategories.idle);
+                } else {
+                  console.warn('⚠️ VRM or mixer not ready for dashboard animations');
                 }
-              }, 100); // Much shorter delay
+              }, 200); // Slightly longer delay for remounting
             }
           },
           undefined,
@@ -589,6 +594,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
     });
 
     return () => {
+      console.log('🧹 VRMViewerCompact unmounting cleanup for model:', modelPath);
       // Clear animation chain
       if (animationChainTimeoutRef.current) {
         clearTimeout(animationChainTimeoutRef.current);
