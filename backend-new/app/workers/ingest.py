@@ -44,12 +44,51 @@ class DataIngestWorker:
         self.interval_seconds = 600  # ~10 minutes
         self.is_running = False
         
+        # Reddit posts cached at startup - only fetch once to avoid rate limiting
+        self.cached_reddit_posts = []
+        self.reddit_fetched = False
+        
         logger.info("✅ Data Ingest Worker initialized")
     
     async def start(self):
         """Start the worker loop"""
         self.is_running = True
         logger.info("🚀 Data Ingest Worker started (interval: 600s)")
+        
+        # Fetch Reddit posts once at startup (to avoid rate limiting)
+        logger.info("📊 Fetching Reddit posts once at startup...")
+        try:
+            self.cached_reddit_posts = await self.reddit.fetch_posts(limit_per_sub=10)
+            self.reddit_fetched = True
+            logger.info(f"✅ Cached {len(self.cached_reddit_posts)} Reddit posts (will reuse for all cycles)")
+            
+            # Write Reddit feed_items once at startup
+            if self.cached_reddit_posts:
+                reddit_feed_items = [
+                    {
+                        "source": "REDDIT",
+                        "title": post["title"],
+                        "metadata": {
+                            "username": post["username"],
+                            "subreddit": post["subreddit"],
+                            "sentiment": post["sentiment"],
+                            "posted_ago": post["posted_ago"],
+                            "url": post["url"],
+                            "score": post.get("score", 0),
+                            "upvote_ratio": post.get("upvote_ratio", 0.5),
+                            "num_comments": post.get("num_comments", 0),
+                            "top_comments": post.get("top_comments", [])[:3]
+                        },
+                        "created_at": datetime.utcnow().isoformat()
+                    }
+                    for post in self.cached_reddit_posts
+                ]
+                await self.db.upsert_feed_items(reddit_feed_items)
+                logger.info(f"✅ Wrote {len(reddit_feed_items)} Reddit feed items (one-time at startup)")
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch Reddit posts at startup: {e}")
+            logger.warning("   Worker will continue with empty Reddit data. Reddit rate limiting may be active.")
+            self.cached_reddit_posts = []
         
         while self.is_running:
             try:
@@ -69,13 +108,18 @@ class DataIngestWorker:
         """Run a single ingest cycle"""
         logger.info("🔄 Starting ingest cycle...")
         
-        # STEP 1: Fetch all external data in parallel
-        btc_data, polymarket_markets, reddit_posts = await asyncio.gather(
+        # STEP 1: Fetch external data
+        # - BTC price: every cycle (live data)
+        # - Polymarket: every cycle (changes frequently)
+        # - Reddit: only once at startup (cached to avoid rate limiting)
+        btc_data, polymarket_markets = await asyncio.gather(
             get_btc_data(),
             self.polymarket.fetch_btc_markets(),
-            self.reddit.fetch_posts(limit_per_sub=10),
             return_exceptions=True
         )
+        
+        # Use cached Reddit posts (fetched once at startup)
+        reddit_posts = self.cached_reddit_posts
         
         # Handle exceptions
         if isinstance(btc_data, Exception):
@@ -88,9 +132,15 @@ class DataIngestWorker:
             logger.error(f"Polymarket fetch failed: {polymarket_markets}")
             polymarket_markets = []
         
-        if isinstance(reddit_posts, Exception):
-            logger.error(f"Reddit fetch failed: {reddit_posts}")
-            reddit_posts = []
+        # Note: reddit_posts is from cache, so no exception handling needed here
+        
+        logger.info(f"📊 Cycle data: {len(reddit_posts)} Reddit posts (cached), {len(polymarket_markets)} Polymarket markets (fresh)")
+        
+        # Note about Reddit being cached
+        if self.reddit_fetched:
+            logger.debug(f"   Using cached Reddit posts from startup (to avoid rate limiting)")
+        elif len(reddit_posts) == 0:
+            logger.warning("⚠️  No Reddit posts available (startup fetch may have failed due to rate limiting)")
         
         # STEP 2: Process with OpenAI to get analysis
         analysis = await self.openai.analyze_market_data(
@@ -103,6 +153,8 @@ class DataIngestWorker:
         # STEP 3: Calculate additional stats
         polymarket_avg_odds = await self.polymarket.get_average_odds()
         reddit_stats = self.reddit.calculate_sentiment_stats(reddit_posts)
+        
+        logger.info(f"📊 Reddit sentiment stats: {reddit_stats['sentiment_bullish']} bullish, {reddit_stats['sentiment_bearish']} bearish, score: {reddit_stats['sentiment_score']}")
         
         # STEP 4: Write to market_context table
         # IMPORTANT: risk_score is set to 0 - Monitor Worker will calculate it
@@ -221,30 +273,8 @@ class DataIngestWorker:
                 elif markets_no_change > 0:
                     logger.info(f"⚠️  All markets matched but changes are <0.1% (too small to display)")
         
-        # STEP 6: Upsert feed_items (Reddit)
-        reddit_feed_items = [
-            {
-                "source": "REDDIT",
-                "title": post["title"],
-                "metadata": {
-                    "username": post["username"],
-                    "subreddit": post["subreddit"],
-                    "sentiment": post["sentiment"],
-                    "posted_ago": post["posted_ago"],
-                    "url": post["url"],
-                    "score": post.get("score", 0),
-                    "upvote_ratio": post.get("upvote_ratio", 0.5),
-                    "num_comments": post.get("num_comments", 0),
-                    "top_comments": post.get("top_comments", [])[:3]  # Store top 3 comments
-                },
-                "created_at": datetime.utcnow().isoformat()
-            }
-            for post in reddit_posts
-        ]
-        
-        if reddit_feed_items:
-            await self.db.upsert_feed_items(reddit_feed_items)
-            logger.info(f"✅ Upserted {len(reddit_feed_items)} Reddit feed items")
+        # STEP 6: Reddit feed_items already written at startup (not updated every cycle)
+        # This avoids Reddit API rate limiting
         
         # STEP 7: Update watchlist (TODO: Use Alpaca for altcoin prices)
         # For MVP, skipping watchlist updates since Alpaca requires separate subscription

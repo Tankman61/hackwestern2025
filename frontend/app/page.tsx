@@ -28,12 +28,9 @@ type HoldingsView = "crypto-holdings" | "stocks-holdings" | "options-holdings" |
 
 const subredditOptions = [
   "All",
-  "r/Polymarket",
-  "r/PredictionMarket",
   "r/wallstreetbets",
-  "r/pennystocks",
-  "r/cryptocurrency",
-  "r/daytrading",
+  "r/CryptoCurrency",
+  "r/Bitcoin",
 ] as const;
 
 type SubredditOption = typeof subredditOptions[number];

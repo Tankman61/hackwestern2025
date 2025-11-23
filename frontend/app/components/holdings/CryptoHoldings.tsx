@@ -18,12 +18,9 @@ type TimeFrame = "1m" | "5m" | "10m" | "15m" | "30m" | "1h" | "4h" | "1d";
 
 const subredditOptions = [
   "All",
-  "r/Polymarket",
-  "r/PredictionMarket",
   "r/wallstreetbets",
-  "r/pennystocks",
-  "r/cryptocurrency",
-  "r/daytrading",
+  "r/CryptoCurrency",
+  "r/Bitcoin",
 ] as const;
 
 type SubredditOption = typeof subredditOptions[number];
