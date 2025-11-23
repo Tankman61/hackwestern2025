@@ -364,7 +364,6 @@ export default function Home() {
 
           {/* Bottom Data Panels */}
           <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
-            <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
                 {/* VTuber Profile Card */}
                 <div
                   className="shrink-0 border-r cursor-pointer flex items-center justify-center"
@@ -516,7 +515,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-            </div>
         </div>
 
         {/* TRADING PANEL - Using Component */}
