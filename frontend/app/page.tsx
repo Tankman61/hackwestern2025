@@ -802,11 +802,9 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Full-Screen Landing Page */}
+      {/* Landing Page */}
       {showLandingPage && (
-        <div className="fixed inset-0 z-50">
-          <LandingPage onEnter={() => setShowLandingPage(false)} />
-        </div>
+        <LandingPage onEnter={() => setShowLandingPage(false)} />
       )}
 
       {/* Settings Modal */}
