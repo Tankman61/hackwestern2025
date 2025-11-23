@@ -338,3 +338,4 @@ LIMIT 1;
    - `GET /api/polymarket` → Individual markets from `feed_items`
 
 All UI panels covered! ✅
+
