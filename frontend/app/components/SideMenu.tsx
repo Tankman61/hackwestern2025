@@ -42,10 +42,11 @@ export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldin
       {/* Menu Toggle Button - Always Visible */}
       <button
         onClick={onToggle}
-        className="fixed left-0 top-1/2 -translate-y-1/2 z-50 w-10 h-20 flex items-center justify-center transition-all backdrop-blur-sm"
+        className="fixed left-0 top-1/2 -translate-y-1/2 z-50 w-10 h-20 flex items-center justify-center transition-all"
         style={{
-          background: 'rgba(var(--slate-3-rgb), 0.8)',
+          background: 'var(--slate-3)',
           border: '1px solid var(--slate-6)',
+          borderLeft: 'none',
           borderRadius: '8px',
           borderTopLeftRadius: '0',
           borderBottomLeftRadius: '0',
@@ -54,10 +55,10 @@ export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldin
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(var(--slate-4-rgb), 0.9)';
+          e.currentTarget.style.background = 'var(--slate-4)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(var(--slate-3-rgb), 0.8)';
+          e.currentTarget.style.background = 'var(--slate-3)';
         }}
       >
         <ChevronRightIcon
@@ -72,11 +73,11 @@ export default function SideMenu({ isOpen, onToggle, onPortfolioSelect, onHoldin
 
       {/* Side Menu */}
       <div
-        className="fixed left-0 top-12 bottom-0 z-40 border-r transition-all duration-200 overflow-hidden"
+        className="fixed left-0 top-16 bottom-0 z-40 transition-all duration-200 overflow-y-auto"
         style={{
           width: isOpen ? '280px' : '0',
           background: 'var(--slate-2)',
-          borderColor: 'var(--slate-6)',
+          borderRight: isOpen ? '1px solid var(--slate-6)' : 'none',
         }}
       >
         <div className="p-4 space-y-1">

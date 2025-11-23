@@ -10,6 +10,8 @@ export default function PortfolioTab() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [closeQty, setCloseQty] = useState<Record<string, string>>({});
+  const [cancelQty, setCancelQty] = useState<Record<string, string>>({});
 
   const fetchData = async () => {
     try {
@@ -65,7 +67,7 @@ export default function PortfolioTab() {
     return (
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
         {/* Portfolio Summary */}
-        <div className="mb-5 p-3 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+        <div className="mb-5 p-3 rounded border" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
           <Text size="1" className="mb-1 uppercase tracking-wider block" style={{ color: 'var(--slate-11)' }}>
             Total Portfolio Value
           </Text>
@@ -93,7 +95,7 @@ export default function PortfolioTab() {
         ) : (
           <div className="space-y-2 mb-4">
             {positions.map((position) => (
-              <div key={position.asset_id} className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+              <div key={position.asset_id} className="p-2.5 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                 <Flex justify="between" align="center" className="mb-1">
                   <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{position.symbol}</Text>
                   <Badge size="1" style={{
@@ -115,11 +117,46 @@ export default function PortfolioTab() {
                     ${position.avg_entry_price.toLocaleString()}
                   </Text>
                 </Flex>
-                <Flex justify="between">
+                <Flex justify="between" className="mb-2">
                   <Text size="1" style={{ color: 'var(--slate-11)' }}>P&L</Text>
                   <Text size="1" weight="bold" className="font-mono" style={{ color: (position.live_pnl ?? position.unrealized_pl) >= 0 ? 'var(--green-11)' : 'var(--red-10)' }}>
                     {(position.live_pnl ?? position.unrealized_pl) >= 0 ? '+' : ''}${(position.live_pnl ?? position.unrealized_pl).toFixed(2)}
                   </Text>
+                </Flex>
+                <Flex gap="2" className="mt-2">
+                  <input
+                    type="number"
+                    placeholder={`Max: ${position.qty.toFixed(6)}`}
+                    value={closeQty[position.asset_id] || ''}
+                    onChange={(e) => setCloseQty(prev => ({ ...prev, [position.asset_id]: e.target.value }))}
+                    className="flex-1 px-2 py-1 rounded border text-xs font-mono"
+                    style={{
+                      background: 'var(--slate-3)',
+                      borderColor: 'var(--slate-6)',
+                      color: 'var(--slate-12)',
+                      outline: 'none'
+                    }}
+                    step="0.000001"
+                    min="0"
+                    max={position.qty}
+                  />
+                  <Button
+                    size="1"
+                    className="cursor-pointer"
+                    style={{ background: 'var(--red-9)', color: 'white' }}
+                    onClick={async () => {
+                      try {
+                        const qty = closeQty[position.asset_id] ? parseFloat(closeQty[position.asset_id]) : undefined;
+                        await api.closePosition(position.symbol, qty ? { qty } : {});
+                        setCloseQty(prev => ({ ...prev, [position.asset_id]: '' }));
+                        fetchData(); // Refresh data
+                      } catch (error) {
+                        console.error("Failed to close position:", error);
+                      }
+                    }}
+                  >
+                    {closeQty[position.asset_id] ? 'Close Partial' : 'Close All'}
+                  </Button>
                 </Flex>
               </div>
             ))}
@@ -137,7 +174,7 @@ export default function PortfolioTab() {
         ) : (
           <div className="space-y-2">
             {orders.map((order) => (
-              <div key={order.id} className="p-2.5 border rounded" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+              <div key={order.id} className="p-2.5 border rounded" style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-6)' }}>
                 <Flex justify="between" align="center" className="mb-1">
                   <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>{order.ticker}</Text>
                   <Badge size="1" style={{

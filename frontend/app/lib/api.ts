@@ -17,6 +17,10 @@ export interface RiskMonitorData {
     level: 'Low' | 'Medium' | 'High';
     summary: string;
   };
+  hype_level: {
+    score: number;
+    level: 'Low' | 'Medium' | 'High';
+  };
   market_overview: {
     btc_price: number;
     price_change_24h: number;
@@ -178,8 +182,38 @@ class ApiService {
 
       return data;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'API request failed';
-      toast.error(message);
+      let message = error instanceof Error ? error.message : 'API request failed';
+      console.log(message);
+      // Handle "Failed to fetch" errors specifically
+      if (message.includes("Failed to fetch") || message.includes("NetworkError") || error instanceof TypeError) {
+        const backendUrl = this.baseUrl;
+        message = `Cannot connect to backend server at ${backendUrl}. Please ensure:\n1. Backend server is running (uvicorn app.main:app --reload)\n2. Backend is accessible at ${backendUrl}\n3. No CORS or firewall issues`;
+        // Only log to console, don't show toast for connection errors during balance checks
+        // The error will be shown by the caller if needed
+        console.error(`❌ Backend connection failed:`, {
+          url: `${this.baseUrl}${endpoint}`,
+          error: error instanceof Error ? error.message : String(error),
+          baseUrl: this.baseUrl
+        });
+      } else {
+        // Extract the actual error message (remove status code prefix like [500])
+        if (message.includes("]")) {
+          const parts = message.split("]");
+          if (parts.length > 1) {
+            message = parts.slice(1).join("]").trim();
+          }
+        }
+      }
+      
+      // Show toast notification for errors (but allow caller to suppress if needed)
+      // Check if this is a silent error (no toast)
+      const silentError = (fetchOptions as any)?.silent === true;
+      if (!silentError) {
+        toast.error(message, {
+          duration: 8000, // Show longer for connection errors
+        });
+      }
+      
       throw error;
     }
   }
@@ -245,11 +279,17 @@ class ApiService {
   }
 
   async createOrder(data: CreateOrderRequest): Promise<any> {
+    // Normalize ticker format: BTC-USD -> BTC/USD for backend
+    const normalizedData = {
+      ...data,
+      ticker: data.ticker.replace('-', '/')
+    };
+    
     return this.fetch('/api/orders', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(normalizedData),
       showSuccessToast: true,
-      successMessage: 'Order placed',
+      successMessage: 'Order placed successfully',
     });
   }
 

@@ -2,12 +2,18 @@
 Trigger Monitor Worker
 Runs every 1 second
 Calculates: risk_score from latest market_context
-Triggers: INTERRUPT when risk_score > 80
+Triggers: INTERRUPT when risk_score > 80 or hype_score > 90
 """
 import asyncio
 import logging
+import os
+import httpx
 from typing import Dict, Any, Optional
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from app.services.supabase import get_supabase
 from app.services.openai_client import get_openai_client
@@ -54,7 +60,7 @@ class TriggerMonitorWorker:
             except Exception as e:
                 logger.error(f"❌ Monitor cycle failed: {e}", exc_info=True)
             
-            # Wait 1 second before next cycle
+            # Wait 10 seconds before next cycle
             await asyncio.sleep(self.interval_seconds)
     
     async def stop(self):
@@ -66,24 +72,36 @@ class TriggerMonitorWorker:
         """Run a single monitor cycle"""
         # STEP 1: Read latest market_context
         context = await self.db.get_latest_market_context()
-        
+
         if not context:
             logger.debug("No market_context available yet")
             return
-        
+
         # STEP 2: Calculate risk_score using weighted formula
         risk_score = self._calculate_risk_score(context)
-        
+
         # STEP 3: Update market_context with calculated risk_score
         try:
             await self.db.update_market_context_risk_score(context["id"], risk_score)
             logger.debug(f"Updated risk_score: {risk_score}/100")
         except Exception as e:
             logger.error(f"Failed to update risk_score: {e}")
-        
-        # STEP 4: Check if we should trigger an alert
+
+        # STEP 4: Check if we should trigger an alert (risk OR hype)
+        hype_score = int(context.get("hype_score", 0))
+
+        should_alert = False
+        alert_type = None
+
         if risk_score >= 80:
-            await self._trigger_alert(context, risk_score)
+            should_alert = True
+            alert_type = "RISK_CRITICAL"
+        elif hype_score >= 90:
+            should_alert = True
+            alert_type = "HYPE_EXTREME"
+
+        if should_alert:
+            await self._trigger_alert(context, risk_score, hype_score, alert_type)
     
     def _calculate_risk_score(self, context: Dict[str, Any]) -> int:
         """
@@ -170,13 +188,15 @@ class TriggerMonitorWorker:
         
         return risk_score
     
-    async def _trigger_alert(self, context: Dict[str, Any], risk_score: int):
+    async def _trigger_alert(self, context: Dict[str, Any], risk_score: int, hype_score: int, alert_type: str):
         """
-        Trigger an INTERRUPT alert when risk is high.
-        
+        Trigger an INTERRUPT alert when risk/hype is high.
+
         Args:
             context: Latest market_context data
             risk_score: Calculated risk score
+            hype_score: Current hype score
+            alert_type: "RISK_CRITICAL" or "HYPE_EXTREME"
         """
         # Check cooldown to avoid spam
         now = datetime.utcnow()
@@ -185,42 +205,100 @@ class TriggerMonitorWorker:
             if time_since_last_alert < self._alert_cooldown_seconds:
                 logger.debug(f"Alert on cooldown ({time_since_last_alert:.0f}s < {self._alert_cooldown_seconds}s)")
                 return
-        
-        logger.warning(f"🚨 HIGH RISK DETECTED: {risk_score}/100")
-        
+
+        logger.warning(f"🚨 {alert_type}: risk={risk_score}/100, hype={hype_score}/100")
+
         # Update last alert time
         self._last_alert_time = now
-        
+
         # Generate alert message with LLM
         alert_message = await self.openai.generate_alert_message({
             "risk_score": risk_score,
+            "hype_score": hype_score,
             "btc_price": context.get("btc_price", 0),
             "price_change_24h": context.get("price_change_24h", 0),
             "sentiment": context.get("sentiment", "UNKNOWN"),
             "polymarket_avg_odds": context.get("polymarket_avg_odds", 0.5)
         })
-        
+
         logger.warning(f"🚨 Alert message: {alert_message}")
-        
+
         # Send WebSocket INTERRUPT if manager is available
         if self.ws_manager:
             try:
                 await self.ws_manager.broadcast({
                     "type": "INTERRUPT",
+                    "alert_type": alert_type,  # "RISK_CRITICAL" or "HYPE_EXTREME"
                     "message": alert_message,
                     "risk_score": risk_score,
+                    "hype_score": hype_score,
                     "btc_price": context.get("btc_price", 0),
-                    "price_change_24h": context.get("price_change_24h", 0)
+                    "price_change_24h": context.get("price_change_24h", 0),
+                    "sentiment": context.get("sentiment", "UNKNOWN")
                 })
                 logger.info("✅ INTERRUPT broadcast sent via WebSocket")
             except Exception as e:
                 logger.error(f"Failed to send WebSocket INTERRUPT: {e}")
         else:
             logger.warning("⚠️  No WebSocket manager available, alert not broadcast")
-        
-        # TODO: Inject SYSTEM_ALERT into agent conversation
-        # This would require integration with the agent graph state
-        # For now, the WebSocket INTERRUPT is sufficient for MVP
+
+        # POST directly to agent - agent will scream via TTS
+        await self._call_agent_with_alert(
+            alert_type=alert_type,
+            alert_message=alert_message,
+            risk_score=risk_score,
+            hype_score=hype_score,
+            btc_price=context.get("btc_price", 0),
+            price_change_24h=context.get("price_change_24h", 0),
+            sentiment=context.get("sentiment", "UNKNOWN")
+        )
+
+    async def _call_agent_with_alert(
+        self,
+        alert_type: str,
+        alert_message: str,
+        risk_score: int,
+        hype_score: int,
+        btc_price: float,
+        price_change_24h: float,
+        sentiment: str
+    ):
+        """
+        Call agent API directly with alert context.
+        Agent will process and respond (TTS will make it scream).
+        """
+        API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+        payload = {
+            "message": alert_message,
+            "thread_id": f"alert-{alert_type.lower()}-{int(datetime.utcnow().timestamp())}",
+            "alert_context": {
+                "alert_type": alert_type,
+                "risk_score": risk_score,
+                "hype_score": hype_score,
+                "btc_price": btc_price,
+                "price_change_24h": price_change_24h,
+                "sentiment": sentiment
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{API_BASE_URL}/api/agent/chat",
+                    json=payload,
+                    timeout=30.0  # Give agent time to respond
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                agent_response = data.get("response", "")
+                logger.info(f"🤖 Agent responded to alert: {agent_response[:100]}...")
+
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Failed to call agent: {e}")
+        except Exception as e:
+            logger.error(f"❌ Unexpected error calling agent: {e}")
 
 
 async def run_monitor_worker(websocket_manager=None):

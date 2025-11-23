@@ -104,6 +104,68 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
     }));
   };
 
+  // Get time frame in seconds
+  const getTimeFrameSeconds = (tf: TimeFrame): number => {
+    switch (tf) {
+      case "1m": return 60;
+      case "5m": return 300;
+      case "10m": return 600;
+      case "15m": return 900;
+      case "30m": return 1800;
+      case "1h": return 3600;
+      case "4h": return 14400;
+      case "1d": return 86400;
+      default: return 60;
+    }
+  };
+
+  // Aggregate data points into the selected time frame
+  const aggregateDataByTimeFrame = (data: typeof dataPointsRef.current, tf: TimeFrame): typeof dataPointsRef.current => {
+    if (data.length === 0) return [];
+    
+    const timeFrameSeconds = getTimeFrameSeconds(tf);
+    const aggregated: typeof dataPointsRef.current = [];
+    const grouped = new Map<number, typeof dataPointsRef.current>();
+
+    // Group data points by time frame bucket
+    for (const point of data) {
+      // Round down to the nearest time frame interval
+      const bucketTime = Math.floor(point.time / timeFrameSeconds) * timeFrameSeconds;
+      
+      if (!grouped.has(bucketTime)) {
+        grouped.set(bucketTime, []);
+      }
+      grouped.get(bucketTime)!.push(point);
+    }
+
+    // Aggregate each group into OHLC bars
+    for (const [bucketTime, points] of grouped.entries()) {
+      if (points.length === 0) continue;
+
+      // Sort points by time to ensure correct order
+      points.sort((a, b) => a.time - b.time);
+
+      const open = points[0].open;
+      const close = points[points.length - 1].close;
+      const high = Math.max(...points.map(p => p.high));
+      const low = Math.min(...points.map(p => p.low));
+      const volume = points.reduce((sum, p) => sum + (p.volume || 0), 0);
+
+      aggregated.push({
+        time: bucketTime,
+        open,
+        high,
+        low,
+        close,
+        volume
+      });
+    }
+
+    // Sort by time
+    aggregated.sort((a, b) => a.time - b.time);
+    return aggregated;
+  };
+
   // Convert OHLC data to volume data for histogram
   const convertToVolumeData = (data: typeof dataPointsRef.current) => {
     return data.map(dp => ({
@@ -217,13 +279,13 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
     }
   };
 
-  // WebSocket connection for live prices
-  const { subscribe } = useAlpacaWebSocket({
-    symbols: selectedHolding ? [selectedHolding.symbol] : [],
-    dataType: "stocks",
-    onMessage: handleMessage,
-    autoConnect: true,
-  });
+  // WebSocket connection disabled - only Bitcoin subscriptions allowed to avoid port issues
+  // const { subscribe } = useAlpacaWebSocket({
+  //   symbols: selectedHolding ? [selectedHolding.symbol] : [],
+  //   dataType: "stocks",
+  //   onMessage: handleMessage,
+  //   autoConnect: true,
+  // });
 
   useEffect(() => {
     if (!selectedHolding || !chartContainerRef.current) {
@@ -671,23 +733,21 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
           </div>
           <div ref={chartContainerRef} className="w-full mb-4" style={{ minHeight: 'min(40vh, 500px)', height: 'min(40vh, 500px)' }} />
           
-          {/* Chart Type and Time Frame Selectors */}
-          <div className="flex flex-col gap-4 mt-4">
-            {/* Chart Type Selector */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Text size="2" weight="medium" style={{ color: 'var(--slate-11)', marginRight: '8px' }}>
+          {/* Chart Controls - Single Line */}
+          <div className="flex flex-wrap items-center gap-1 mt-4 mb-4" style={{ gap: '0.25rem' }}>
+            {/* Chart Type */}
+            <div className="flex items-center gap-1" style={{ gap: '0.125rem' }}>
+              <Text size="1" weight="medium" style={{ color: 'var(--slate-11)', fontSize: '0.7rem' }}>
                 Chart Type:
               </Text>
               {(["candlestick", "bar", "line", "area", "baseline", "histogram"] as ChartType[]).map((type) => (
                 <button
                   key={type}
                   onClick={() => setChartType(type)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    chartType === type
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                  }`}
+                  className="rounded-sm font-medium transition-colors"
                   style={{
+                    padding: '0.125rem 0.375rem',
+                    fontSize: '0.7rem',
                     backgroundColor: chartType === type ? "var(--blue-9)" : "var(--slate-7)",
                     color: chartType === type ? "white" : "var(--slate-11)",
                   }}
@@ -697,21 +757,22 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               ))}
             </div>
             
-            {/* Time Frame Selector */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Text size="2" weight="medium" style={{ color: 'var(--slate-11)', marginRight: '8px' }}>
+            {/* Separator */}
+            <div className="bg-slate-600" style={{ height: '0.875rem', width: '1px' }} />
+            
+            {/* Time Frame */}
+            <div className="flex items-center gap-1" style={{ gap: '0.125rem' }}>
+              <Text size="1" weight="medium" style={{ color: 'var(--slate-11)', fontSize: '0.7rem' }}>
                 Time Frame:
               </Text>
               {(["1m", "5m", "10m", "15m", "30m", "1h", "4h", "1d"] as TimeFrame[]).map((tf) => (
                 <button
                   key={tf}
                   onClick={() => setTimeFrame(tf)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    timeFrame === tf
-                      ? "bg-green-600 text-white"
-                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                  }`}
+                  className="rounded-sm font-medium transition-colors"
                   style={{
+                    padding: '0.125rem 0.375rem',
+                    fontSize: '0.7rem',
                     backgroundColor: timeFrame === tf ? "var(--green-9)" : "var(--slate-7)",
                     color: timeFrame === tf ? "white" : "var(--slate-11)",
                   }}
@@ -721,15 +782,20 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               ))}
             </div>
             
+            {/* Separator */}
+            <div className="bg-slate-600" style={{ height: '0.875rem', width: '1px' }} />
+            
             {/* Zoom Controls */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Text size="2" weight="medium" style={{ color: 'var(--slate-11)', marginRight: '8px' }}>
+            <div className="flex items-center gap-1" style={{ gap: '0.125rem' }}>
+              <Text size="1" weight="medium" style={{ color: 'var(--slate-11)', fontSize: '0.7rem' }}>
                 Zoom:
               </Text>
               <button
                 onClick={zoomOut}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}
@@ -739,8 +805,10 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               </button>
               <button
                 onClick={fitContent}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}
@@ -750,8 +818,10 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               </button>
               <button
                 onClick={zoomIn}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}
@@ -759,11 +829,13 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               >
                 +
               </button>
-              <div className="h-6 w-px bg-slate-600 mx-1" />
+              <div className="bg-slate-600" style={{ height: '0.875rem', width: '1px', marginLeft: '0.125rem' }} />
               <button
                 onClick={() => showLastPeriod(3600)}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}
@@ -773,8 +845,10 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               </button>
               <button
                 onClick={() => showLastPeriod(14400)}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}
@@ -784,8 +858,10 @@ export default function StocksHoldings({ initialSelectedHolding = null, onReturn
               </button>
               <button
                 onClick={() => showLastPeriod(86400)}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                className="rounded-sm font-medium transition-colors"
                 style={{
+                  padding: '0.125rem 0.375rem',
+                  fontSize: '0.7rem',
                   backgroundColor: "var(--slate-7)",
                   color: "var(--slate-11)",
                 }}

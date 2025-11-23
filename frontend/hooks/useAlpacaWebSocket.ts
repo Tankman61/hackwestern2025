@@ -54,8 +54,10 @@ export function useAlpacaWebSocket({
   useEffect(() => {
     if (!wsRef.current || !autoConnect) return;
 
-    console.log(`🔌 Connecting to ${wsRef.current.dataType} stream for symbols:`, symbols);
-    wsRef.current.connect();
+    // Connect (will be idempotent - won't create duplicate connections)
+    wsRef.current.connect().catch((error) => {
+      console.error('Failed to connect WebSocket:', error);
+    });
 
     if (symbols.length > 0) {
       // Subscribe immediately (the WebSocket manager will handle queuing if not connected)
@@ -64,7 +66,6 @@ export function useAlpacaWebSocket({
       const timer = setTimeout(() => {
         // Retry subscription after connection is established
         if (wsRef.current?.isConnected()) {
-          console.log(`🔄 Retrying subscription to:`, symbols);
           wsRef.current.subscribe(symbols);
         }
       }, 500);
@@ -72,11 +73,15 @@ export function useAlpacaWebSocket({
       return () => {
         clearTimeout(timer);
         // Unsubscribe when symbols change or component unmounts
+        // Note: We don't disconnect - the connection is shared and should stay alive
         if (wsRef.current && symbols.length > 0) {
           wsRef.current.unsubscribe(symbols);
         }
       };
     }
+    
+    // Cleanup: Don't disconnect on unmount - connection is shared
+    // Components should only unsubscribe, not disconnect
   }, [symbols, autoConnect]);
 
   // Subscribe to new symbols

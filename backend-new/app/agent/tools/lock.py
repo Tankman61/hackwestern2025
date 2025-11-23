@@ -34,7 +34,7 @@ async def lock_user_account(reason: str, duration_seconds: int = 300) -> str:
         lock_expires_at = datetime.utcnow() + timedelta(seconds=duration_seconds)
 
         # Update portfolio lock status
-        result = db.table("portfolio").update({
+        result = db.client.table("portfolio").update({
             "is_locked": True,
             "lock_reason": reason,
             "lock_expires_at": lock_expires_at.isoformat()

@@ -25,7 +25,7 @@ async def get_risk_monitor():
     db = get_supabase()
 
     # Get latest market_context
-    context_result = db.table("market_context")\
+    context_result = db.client.table("market_context")\
         .select("*")\
         .order("created_at", desc=True)\
         .limit(1)\
@@ -38,6 +38,10 @@ async def get_risk_monitor():
                 "score": 0,
                 "level": "Low",
                 "summary": "No market data available"
+            },
+            "hype_level": {
+                "score": 0,
+                "level": "Low"
             },
             "market_overview": {
                 "btc_price": 0,
@@ -60,8 +64,17 @@ async def get_risk_monitor():
     else:
         risk_level = "High"
 
+    # Determine hype level from score
+    hype_score = int(context.get("hype_score", 0))
+    if hype_score < 40:
+        hype_level = "Low"
+    elif hype_score < 70:
+        hype_level = "Medium"
+    else:
+        hype_level = "High"
+
     # Get watchlist
-    watchlist_result = db.table("watchlist")\
+    watchlist_result = db.client.table("watchlist")\
         .select("ticker, price_change_24h")\
         .order("ticker")\
         .execute()
@@ -80,6 +93,10 @@ async def get_risk_monitor():
             "score": risk_score,
             "level": risk_level,
             "summary": context.get("summary", "")
+        },
+        "hype_level": {
+            "score": hype_score,
+            "level": hype_level
         },
         "market_overview": {
             "btc_price": float(context.get("btc_price", 0)),
@@ -103,7 +120,7 @@ async def get_polymarket():
     """Get Polymarket prediction markets"""
     db = get_supabase()
 
-    result = db.table("feed_items")\
+    result = db.client.table("feed_items")\
         .select("title, metadata")\
         .eq("source", "POLYMARKET")\
         .order("created_at", desc=True)\
@@ -132,7 +149,7 @@ async def get_reddit(subreddit: Optional[str] = Query("All", description="Filter
     """Get Reddit posts with optional subreddit filter"""
     db = get_supabase()
 
-    result = db.table("feed_items")\
+    result = db.client.table("feed_items")\
         .select("title, metadata")\
         .eq("source", "REDDIT")\
         .order("created_at", desc=True)\
@@ -168,7 +185,7 @@ async def get_sentiment():
     """Get aggregated sentiment stats from Reddit, Polymarket, etc."""
     db = get_supabase()
 
-    result = db.table("market_context")\
+    result = db.client.table("market_context")\
         .select("sentiment_bullish, sentiment_bearish, sentiment_score, post_volume_24h")\
         .order("created_at", desc=True)\
         .limit(1)\

@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
 import OptionsPortfolio from "./components/portfolios/OptionsPortfolio";
+import { useAlpacaWebSocket } from "@/hooks/useAlpacaWebSocket";
+import type { AlpacaMessage } from "@/lib/websocket";
 import ETFsPortfolio from "./components/portfolios/ETFsPortfolio";
 import CryptoHoldings from "./components/holdings/CryptoHoldings";
 import StocksHoldings from "./components/holdings/StocksHoldings";
@@ -45,14 +47,15 @@ export default function Home() {
   const [characterSwapperOpen, setCharacterSwapperOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
-  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("trade");
+  const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("risk");
   const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
+  const [riskScore, setRiskScore] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState("0");
   const [priceChange, setPriceChange] = useState("0");
   const [currentTime, setCurrentTime] = useState("");
   const [messageInput, setMessageInput] = useState("");
-  const [positionSize, setPositionSize] = useState("0.5");
+  const [positionSize, setPositionSize] = useState("");
   const [tradeType, setTradeType] = useState<"long" | "short">("long");
   const [stopLoss, setStopLoss] = useState("97,200");
   const [takeProfit, setTakeProfit] = useState("100,500");
@@ -64,6 +67,7 @@ export default function Home() {
   const [activePortfolio, setActivePortfolio] = useState<PortfolioView>(null);
   const [activeHoldings, setActiveHoldings] = useState<HoldingsView>(null);
   const [homeResetKey, setHomeResetKey] = useState(0);
+  const [navbarHolding, setNavbarHolding] = useState<{ symbol: string; name: string } | null>(null);
 
   // Character data
   const characters = [
@@ -81,27 +85,67 @@ export default function Home() {
   const [loadingReddit, setLoadingReddit] = useState(true);
   const [loadingSentiment, setLoadingSentiment] = useState(true);
 
-  // Fetch BTC price and risk level from risk monitor
-  useEffect(() => {
-    const fetchPriceAndRisk = async () => {
-      try {
-        const riskData = await api.getRiskMonitor();
-        const market = riskData?.market_overview;
-
-        if (market) {
+  // Handle WebSocket messages for live BTC price
+  const handlePriceMessage = (message: AlpacaMessage) => {
+    if (message.type === "bar" && message.data) {
+      const barData = message.data;
+      // Check if it's BTC
+      const symbol = barData.symbol?.toUpperCase() || "";
+      if (symbol.includes("BTC") || symbol === "BTC") {
+        const price = barData.close;
+        if (price && price > 0) {
           setCurrentPrice(
-            market.btc_price.toLocaleString('en-US', {
+            price.toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })
           );
-          setPriceChange(market.price_change_24h.toFixed(2));
-        } else {
-          setCurrentPrice("0.00");
-          setPriceChange("0.00");
         }
+      }
+    } else if (message.type === "trade" && message.data) {
+      const tradeData = message.data;
+      // Check if it's BTC
+      const symbol = tradeData.symbol?.toUpperCase() || "";
+      if (symbol.includes("BTC") || symbol === "BTC") {
+        const price = tradeData.price;
+        if (price && price > 0) {
+          setCurrentPrice(
+            price.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })
+          );
+        }
+      }
+    }
+  };
 
+  // WebSocket connection for live BTC price updates
+  useAlpacaWebSocket({
+    symbols: ["BTC"],
+    dataType: "crypto",
+    onMessage: handlePriceMessage,
+    autoConnect: true,
+  });
+
+  // Listen for holding selection events from CryptoHoldings component
+  useEffect(() => {
+    const handleHoldingSelected = (event: CustomEvent<{ symbol: string; name: string } | null>) => {
+      setNavbarHolding(event.detail);
+    };
+    window.addEventListener('holdingSelectedForNavbar', handleHoldingSelected as EventListener);
+    return () => {
+      window.removeEventListener('holdingSelectedForNavbar', handleHoldingSelected as EventListener);
+    };
+  }, []);
+
+  // Fetch risk level from risk monitor (price comes from WebSocket)
+  useEffect(() => {
+    const fetchRisk = async () => {
+      try {
+        const riskData = await api.getRiskMonitor();
         const score = riskData?.risk_level?.score ?? 0;
+        setRiskScore(score);
         if (score < 40) {
           setRiskLevel("low");
         } else if (score < 70) {
@@ -110,15 +154,14 @@ export default function Home() {
           setRiskLevel("high");
         }
       } catch (error) {
-        console.error("Failed to fetch price and risk:", error);
-        setCurrentPrice("0.00");
-        setPriceChange("0.00");
+        console.error("Failed to fetch risk:", error);
         setRiskLevel("low");
+        setRiskScore(0);
       }
     };
 
-    fetchPriceAndRisk();
-    const interval = setInterval(fetchPriceAndRisk, 2000);
+    fetchRisk();
+    const interval = setInterval(fetchRisk, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -155,7 +198,7 @@ export default function Home() {
     };
 
     fetchSentiment();
-    const interval = setInterval(fetchSentiment, 5000);
+    const interval = setInterval(fetchSentiment, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -163,7 +206,13 @@ export default function Home() {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentTime(now.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'UTC'
+      }));
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -206,18 +255,36 @@ export default function Home() {
       {/* Top Bar */}
       <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
-          {/* Vibe Trade Title - Clickable to go to landing page */}
-          <button
-            onClick={() => setShowLandingPage(true)}
-            className="text-xl font-bold hover:opacity-80 transition-opacity"
-            style={{ color: 'var(--slate-12)', border: 'none', background: 'transparent', cursor: 'pointer' }}
-          >
-            Vibe Trade
-          </button>
-
-          <div className="flex items-center gap-1.5 ml-4">
+          {navbarHolding && (
+            <div>
+              <Text size="6" weight="bold" style={{ color: 'var(--slate-12)' }}>
+                {navbarHolding.symbol}
+              </Text>
+              <Text size="2" className="block" style={{ color: 'var(--slate-11)' }}>
+                {navbarHolding.name}
+              </Text>
+            </div>
+          )}
+        </Flex>
+        <Flex align="center" gap="3">
+          <div className="flex items-center gap-3">
+            {navbarHolding && (
+              <Button
+                variant="soft"
+                onClick={() => {
+                  setActiveHoldings(null);
+                  setActivePortfolio(null);
+                  setNavbarHolding(null);
+                }}
+                style={{ cursor: 'pointer', marginRight: '1rem' }}
+              >
+                <ArrowLeftIcon /> Return
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5" style={{ minWidth: '140px' }}>
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green-9)' }}></div>
-            <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)' }}>
+            <Text size="2" className="font-mono" style={{ color: 'var(--slate-11)', whiteSpace: 'nowrap' }}>
               {currentTime || "00:00:00"} UTC
             </Text>
           </div>
@@ -248,109 +315,78 @@ export default function Home() {
         }}
       />
 
-      <div className="grid h-[calc(100vh-3rem)] gap-0" style={{
-        gridTemplateColumns: tradingPanelOpen ? '1fr 280px 40px' : '1fr 40px',
-        gridTemplateRows: '1fr'
-      }}>
+      <div className="flex h-[calc(100vh-3rem)] gap-0">
         {/* LEFT COLUMN */}
-        <div className="flex flex-col">
-          {activePortfolio === null && activeHoldings === null ? (
-            <>
-              {/* Crypto Holdings Dashboard */}
-              <div className="flex-1 border-r overflow-hidden" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-                <CryptoHoldingsDashboard 
-                  key={homeResetKey}
-                  resetFilter={homeResetKey > 0}
-                  onHoldingClick={(holding) => {
-                    // Navigate to the appropriate holdings view based on type
-                    const holdingsViewMap: Record<string, HoldingsView> = {
-                      crypto: "crypto-holdings",
-                      stocks: "stocks-holdings",
-                      options: "options-holdings",
-                      etfs: "etfs-holdings"
-                    };
-                    const holdingsView = holdingsViewMap[holding.type];
-                    if (holdingsView) {
-                      setActiveHoldings(holdingsView);
-                      // Store the holding to select in the holdings component
-                      // We'll need to pass this through props or context
-                      setTimeout(() => {
-                        // Use a small delay to ensure the component is mounted
-                        const event = new CustomEvent('selectHolding', { detail: holding });
-                        window.dispatchEvent(event);
-                      }, 100);
-                    }
-                  }}
-                />
-              </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Main Content Area - scrollable */}
+          <div className="flex-1 border-r overflow-hidden min-h-0" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
+            {activePortfolio === null && activeHoldings === null ? (
+              <CryptoHoldingsDashboard
+                key={homeResetKey}
+                resetFilter={homeResetKey > 0}
+                onHoldingClick={(holding) => {
+                  // Navigate to the appropriate holdings view based on type
+                  const holdingsViewMap: Record<string, HoldingsView> = {
+                    crypto: "crypto-holdings",
+                    stocks: "stocks-holdings",
+                    options: "options-holdings",
+                    etfs: "etfs-holdings"
+                  };
+                  const holdingsView = holdingsViewMap[holding.type];
+                  if (holdingsView) {
+                    setActiveHoldings(holdingsView);
+                    // Store the holding to select in the holdings component
+                    // We'll need to pass this through props or context
+                    setTimeout(() => {
+                      // Use a small delay to ensure the component is mounted
+                      const event = new CustomEvent('selectHolding', { detail: holding });
+                      window.dispatchEvent(event);
+                    }, 100);
+                  }
+                }}
+              />
+            ) : activePortfolio !== null ? (
+              <>
+                {activePortfolio === "crypto" && <CryptoPortfolio />}
+                {activePortfolio === "stocks" && <StocksPortfolio />}
+                {activePortfolio === "options" && <OptionsPortfolio />}
+                {activePortfolio === "etfs" && <ETFsPortfolio />}
+              </>
+            ) : (
+              <>
+                {activeHoldings === "crypto-holdings" && <CryptoHoldings onReturn={() => setActiveHoldings(null)} />}
+                {activeHoldings === "stocks-holdings" && <StocksHoldings />}
+                {activeHoldings === "options-holdings" && <OptionsHoldings />}
+                {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
+              </>
+            )}
+          </div>
 
-              {/* Bottom Data Panels */}
-              <div className="h-96 border-t border-r grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)' }}>
-                {/* VTuber Profile Card - Expanded to fill available space */}
-                {!showLandingPage && (
-                  <div
-                    className="border-r cursor-pointer flex items-center justify-center h-full p-2"
-                    style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px' }}
-                    onClick={() => setAgentExpanded(!agentExpanded)}
-                  >
-                    <div className="w-full h-full rounded-lg border-2 shadow-lg relative overflow-hidden" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                      <VRMViewerCompact
-                        key={`vrm-${selectedCharacter.id}`} // Force re-render when character changes
-                        onSceneClick={() => setAgentExpanded(!agentExpanded)}
-                        modelPath={selectedCharacter.vrm}
-                      />
-
-                      {/* Control Buttons */}
-                      <div className="absolute top-3 left-3 flex gap-2">
-                        {/* Mute/Unmute Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsMuted(!isMuted);
-                          }}
-                          className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
-                          style={{
-                            background: 'transparent',
-                            borderColor: 'var(--slate-6)',
-                            color: 'var(--slate-11)'
-                          }}
-                        >
-                          {isMuted ? (
-                            <SpeakerOffIcon width="18" height="18" />
-                          ) : (
-                            <SpeakerLoudIcon width="18" height="18" />
-                          )}
-                        </button>
-
-                        {/* Character Swap Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCharacterSwapperOpen(true);
-                          }}
-                          className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
-                          style={{
-                            background: 'transparent',
-                            borderColor: 'var(--slate-6)',
-                            color: 'var(--slate-11)'
-                          }}
-                        >
-                          <PersonIcon width="18" height="18" />
-                        </button>
-                      </div>
-
-                      <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
-                    </div>
+          {/* Bottom Data Panels - REMOVED - taking up too much space */}
+          {false && (
+            <div className="shrink-0 border-t border-r flex gap-0" style={{ borderColor: 'var(--slate-6)' }}>
+                {/* VTuber Profile Card */}
+                <div
+                  className="shrink-0 border-r cursor-pointer flex items-center justify-center"
+                  style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '16rem', height: '16rem' }}
+                  onClick={() => setAgentExpanded(!agentExpanded)}
+                >
+                  <div className="w-[12.5rem] h-[12.5rem] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
+                    <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
+                    <span className="relative z-10">🎯</span>
+                    <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
                   </div>
-                )}
+                </div>
 
                 {/* Polymarket Panel - Using Component */}
-                <PolymarketPanel />
+                <div className="flex-1 min-w-0">
+                  <PolymarketPanel />
+                </div>
 
                 {/* Social Sentiment Panel */}
                 <div
-                  className="p-3 flex flex-col cursor-pointer"
-                  style={{ background: 'var(--slate-2)' }}
+                  className="flex-1 p-3 flex flex-col cursor-pointer min-w-0"
+                  style={{ background: 'var(--slate-2)', height: '16rem' }}
                   onClick={() => setSentimentExpanded(!sentimentExpanded)}
                 >
                   <Flex justify="between" align="center" className="mb-2">
@@ -480,22 +516,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-              </div>
-            </>
-          ) : activePortfolio !== null ? (
-            <>
-              {activePortfolio === "crypto" && <CryptoPortfolio />}
-              {activePortfolio === "stocks" && <StocksPortfolio />}
-              {activePortfolio === "options" && <OptionsPortfolio />}
-              {activePortfolio === "etfs" && <ETFsPortfolio />}
-            </>
-          ) : (
-            <>
-              {activeHoldings === "crypto-holdings" && <CryptoHoldings onReturn={() => setActiveHoldings(null)} />}
-              {activeHoldings === "stocks-holdings" && <StocksHoldings />}
-              {activeHoldings === "options-holdings" && <OptionsHoldings />}
-              {activeHoldings === "etfs-holdings" && <ETFsHoldings />}
-            </>
+            </div>
           )}
         </div>
 
@@ -512,6 +533,8 @@ export default function Home() {
             setStopLoss={setStopLoss}
             takeProfit={takeProfit}
             setTakeProfit={setTakeProfit}
+            riskLevel={riskLevel}
+            riskScore={riskScore}
           />
         )}
 
@@ -802,9 +825,11 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Landing Page */}
+      {/* Landing Page - Full Screen Overlay */}
       {showLandingPage && (
-        <LandingPage onEnter={() => setShowLandingPage(false)} />
+        <div className="fixed inset-0 z-[100]" style={{ background: 'transparent' }}>
+          <LandingPage onEnter={() => setShowLandingPage(false)} />
+        </div>
       )}
 
       {/* Settings Modal */}
@@ -824,15 +849,15 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-8"
+              className="fixed inset-0 z-50 flex items-center justify-center p-8 overflow-y-auto"
               onClick={() => setSettingsOpen(false)}
             >
               <div
-                className="relative w-full max-w-3xl max-h-[80vh] overflow-hidden rounded-lg shadow-2xl border"
+                className="relative w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-lg shadow-2xl border flex flex-col"
                 style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="h-full flex flex-col">
+                <div className="flex-1 flex flex-col min-h-0">
                   <div className="p-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
                     <Flex justify="between" align="center">
                       <Text size="5" weight="bold" style={{ color: 'var(--slate-12)' }}>
@@ -846,33 +871,31 @@ export default function Home() {
                       </button>
                     </Flex>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
+                  <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin min-h-0">
                     <div>
-                      <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                      <Text size="3" weight="bold" className="mb-5 block" style={{ color: 'var(--slate-12)' }}>
                         AI Agent Configuration
                       </Text>
-                      <div className="space-y-4">
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Flex justify="between" align="center" className="mb-2">
-                            <div>
-                              <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Enable Voice Alerts</Text>
-                              <Text size="1" style={{ color: 'var(--slate-11)' }}>Agent will speak when anomalies are detected</Text>
-                            </div>
-                            <input type="checkbox" defaultChecked className="w-5 h-5" />
-                          </Flex>
-                        </div>
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Flex justify="between" align="center" className="mb-2">
-                            <div>
-                              <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Auto-Interrupt Trading</Text>
-                              <Text size="1" style={{ color: 'var(--slate-11)' }}>Block trades when risk level is critical</Text>
-                            </div>
-                            <input type="checkbox" className="w-5 h-5" />
-                          </Flex>
-                        </div>
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                      <div className="space-y-5">
+                        <Flex justify="between" align="center" className="py-3">
+                          <div>
+                            <Text size="2" weight="medium" className="block mb-1" style={{ color: 'var(--slate-12)' }}>Enable Voice Alerts</Text>
+                            <Text size="1" className="block" style={{ color: 'var(--slate-11)' }}>Agent will speak when anomalies are detected</Text>
+                          </div>
+                          <input type="checkbox" defaultChecked className="w-5 h-5" style={{ accentColor: 'var(--blue-9)' }} />
+                        </Flex>
+                        <div className="h-px" style={{ background: 'var(--slate-6)' }} />
+                        <Flex justify="between" align="center" className="py-3">
+                          <div>
+                            <Text size="2" weight="medium" className="block mb-1" style={{ color: 'var(--slate-12)' }}>Auto-Interrupt Trading</Text>
+                            <Text size="1" className="block" style={{ color: 'var(--slate-11)' }}>Block trades when risk level is critical</Text>
+                          </div>
+                          <input type="checkbox" className="w-5 h-5" style={{ accentColor: 'var(--blue-9)' }} />
+                        </Flex>
+                        <div className="h-px" style={{ background: 'var(--slate-6)' }} />
+                        <div className="py-3">
                           <Text size="2" weight="medium" className="mb-2 block" style={{ color: 'var(--slate-12)' }}>Risk Threshold</Text>
-                          <Text size="1" className="mb-3 block" style={{ color: 'var(--slate-11)' }}>Alert when risk level exceeds</Text>
+                          <Text size="1" className="mb-4 block" style={{ color: 'var(--slate-11)' }}>Alert when risk level exceeds</Text>
                           <input type="range" min="0" max="100" defaultValue="70" className="w-full" style={{ accentColor: 'var(--red-9)' }} />
                           <Flex justify="between" className="mt-2">
                             <Text size="1" style={{ color: 'var(--slate-11)' }}>Low</Text>
@@ -882,53 +905,49 @@ export default function Home() {
                       </div>
                     </div>
                     <div>
-                      <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                      <Text size="3" weight="bold" className="mb-5 block" style={{ color: 'var(--slate-12)' }}>
                         Trading Preferences
                       </Text>
-                      <div className="space-y-4">
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Flex justify="between" align="center" className="mb-2">
-                            <div>
-                              <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Confirm Before Execute</Text>
-                              <Text size="1" style={{ color: 'var(--slate-11)' }}>Require confirmation for all trades</Text>
-                            </div>
-                            <input type="checkbox" defaultChecked className="w-5 h-5" />
-                          </Flex>
-                        </div>
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Text size="2" weight="medium" className="mb-2 block" style={{ color: 'var(--slate-12)' }}>Default Position Size</Text>
+                      <div className="space-y-5">
+                        <Flex justify="between" align="center" className="py-3">
+                          <div>
+                            <Text size="2" weight="medium" className="block mb-1" style={{ color: 'var(--slate-12)' }}>Confirm Before Execute</Text>
+                            <Text size="1" className="block" style={{ color: 'var(--slate-11)' }}>Require confirmation for all trades</Text>
+                          </div>
+                          <input type="checkbox" defaultChecked className="w-5 h-5" style={{ accentColor: 'var(--blue-9)' }} />
+                        </Flex>
+                        <div className="h-px" style={{ background: 'var(--slate-6)' }} />
+                        <div className="py-3">
+                          <Text size="2" weight="medium" className="mb-3 block" style={{ color: 'var(--slate-12)' }}>Default Position Size</Text>
                           <input
                             type="text"
                             defaultValue="0.5"
                             className="w-full px-3 py-2 rounded border font-mono"
-                            style={{ background: 'var(--slate-4)', borderColor: 'var(--slate-7)', color: 'var(--slate-12)' }}
+                            style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)', color: 'var(--slate-12)' }}
                           />
                         </div>
                       </div>
                     </div>
                     <div>
-                      <Text size="3" weight="bold" className="mb-4 block" style={{ color: 'var(--slate-12)' }}>
+                      <Text size="3" weight="bold" className="mb-5 block" style={{ color: 'var(--slate-12)' }}>
                         Data Sources
                       </Text>
-                      <div className="space-y-4">
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Flex justify="between" align="center">
-                            <div>
-                              <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Polymarket Integration</Text>
-                              <Text size="1" style={{ color: 'var(--green-11)' }}>Connected</Text>
-                            </div>
-                            <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
-                          </Flex>
-                        </div>
-                        <div className="p-4 rounded border" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
-                          <Flex justify="between" align="center">
-                            <div>
-                              <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>Reddit Sentiment</Text>
-                              <Text size="1" style={{ color: 'var(--green-11)' }}>Connected</Text>
-                            </div>
-                            <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
-                          </Flex>
-                        </div>
+                      <div className="space-y-5">
+                        <Flex justify="between" align="center" className="py-3">
+                          <div>
+                            <Text size="2" weight="medium" className="block mb-1" style={{ color: 'var(--slate-12)' }}>Polymarket Integration</Text>
+                            <Text size="1" className="block" style={{ color: 'var(--green-11)' }}>Connected</Text>
+                          </div>
+                          <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
+                        </Flex>
+                        <div className="h-px" style={{ background: 'var(--slate-6)' }} />
+                        <Flex justify="between" align="center" className="py-3">
+                          <div>
+                            <Text size="2" weight="medium" className="block mb-1" style={{ color: 'var(--slate-12)' }}>Reddit Sentiment</Text>
+                            <Text size="1" className="block" style={{ color: 'var(--green-11)' }}>Connected</Text>
+                          </div>
+                          <Badge style={{ background: 'var(--green-4)', color: 'var(--green-11)' }}>Active</Badge>
+                        </Flex>
                       </div>
                     </div>
                   </div>

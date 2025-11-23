@@ -25,6 +25,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
 
   // Animation state management
   const animationChainTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentChainIndexRef = useRef<number>(0);
   const currentChainRef = useRef<Array<{ name: string; path: string; emoji: string }>>([]);
   const currentActionRef = useRef<THREE.AnimationAction | null>(null);
@@ -442,7 +443,7 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
     };
 
     // Set up the fallback to trigger after a delay
-    const fallbackTimeout = setTimeout(fallbackAnimationStarter, 1000);
+    fallbackTimeoutRef.current = setTimeout(fallbackAnimationStarter, 1000);
 
       scene = new THREE.Scene();
       scene.background = null; // Transparent background
@@ -716,8 +717,9 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
         animationChainTimeoutRef.current = null;
       }
       // Clear fallback timeout
-      if (fallbackTimeout) {
-        clearTimeout(fallbackTimeout);
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+        fallbackTimeoutRef.current = null;
       }
 
       // Stop all animations

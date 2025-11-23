@@ -4,7 +4,7 @@ Handles WebSocket connections from frontend and broadcasts live price updates
 """
 import asyncio
 from typing import Dict, Set
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 import logging
 import json
 
@@ -47,21 +47,17 @@ class ConnectionManager:
         
     async def subscribe(self, websocket: WebSocket, data_type: str, symbols: list[str]):
         """Subscribe a connection to specific symbols"""
-        logger.info(f"📥 Subscribe request: data_type={data_type}, symbols={symbols}")
-        
         if websocket not in self.connection_symbols:
             self.connection_symbols[websocket] = set()
-        
+
         # Normalize symbols (remove any /USD or USD suffixes for storage)
         normalized_symbols = []
         for s in symbols:
             clean_s = s.replace("/USD", "").replace("USD", "").replace("/", "")
             normalized_symbols.append(clean_s)
-            logger.info(f"   Normalized symbol: '{s}' -> '{clean_s}'")
-            
+
         self.connection_symbols[websocket].update(normalized_symbols)
-        logger.info(f"   Connection now subscribed to: {self.connection_symbols[websocket]}")
-        
+
         # Subscribe to Finnhub for all market data display
         if data_type == "crypto":
             await finnhub_service.subscribe_crypto(normalized_symbols)
@@ -69,9 +65,9 @@ class ConnectionManager:
             # Use Finnhub for stocks/etfs/options display too
             # Note: Alpaca is only used for actual trading execution
             await finnhub_service.subscribe_stocks(normalized_symbols)
-            
-        logger.info(f"✅ Subscribed {data_type} connection to symbols: {normalized_symbols}")
-        
+
+        logger.info(f"Subscribed {data_type} connection to: {normalized_symbols}")
+
         # Send confirmation
         await websocket.send_json({
             "type": "subscribed",
@@ -86,10 +82,9 @@ class ConnectionManager:
     async def broadcast_to_subscribers(self, data_type: str, symbol: str, message: dict):
         """Broadcast message to all connections subscribed to this symbol"""
         disconnected = set()
-        
-        # Log every message for debugging
-        logger.info(f"🌐 Broadcasting {data_type} message for symbol '{symbol}' to {len(self.active_connections[data_type])} connections")
-        
+
+        # NO LOGGING - this is called for every trade update (multiple times per second)
+
         # Normalize the incoming symbol for comparison
         # BTCUSD -> BTC, BTC/USD -> BTC, BTC -> BTC
         def normalize_symbol(s: str) -> str:
@@ -99,45 +94,32 @@ class ConnectionManager:
             if normalized.endswith("USD"):
                 normalized = normalized[:-3]
             return normalized.upper()
-        
+
         normalized_incoming = normalize_symbol(symbol)
-        logger.info(f"   Normalized incoming symbol: '{symbol}' -> '{normalized_incoming}'")
-        
-        messages_sent = 0
+
         for websocket in self.active_connections[data_type]:
             # Check if this connection is subscribed to this symbol
             subscribed_symbols = self.connection_symbols.get(websocket, set())
-            logger.info(f"   Checking connection with subscribed symbols: {subscribed_symbols}")
-            
+
             # Check if any subscribed symbol matches (normalized)
             should_send = False
             for sub_symbol in subscribed_symbols:
                 normalized_sub = normalize_symbol(sub_symbol)
-                logger.info(f"      Comparing: '{normalized_incoming}' == '{normalized_sub}' (from '{sub_symbol}')")
                 if normalized_incoming == normalized_sub:
                     should_send = True
-                    logger.info(f"      ✅ Symbol match found: '{normalized_incoming}' == '{normalized_sub}'")
                     break
-            
+
             # Also check direct match
             if not should_send:
                 should_send = symbol in subscribed_symbols or normalized_incoming in subscribed_symbols
-                if should_send:
-                    logger.info(f"      ✅ Direct symbol match found")
-            
+
             if should_send:
                 try:
                     await websocket.send_json(message)
-                    messages_sent += 1
-                    logger.info(f"      ✅ Message sent to WebSocket")
                 except Exception as e:
-                    logger.error(f"      ❌ Error sending to WebSocket: {e}")
+                    logger.error(f"Error sending to WebSocket: {e}")
                     disconnected.add(websocket)
-            else:
-                logger.info(f"      ⏭️  Skipping - no symbol match")
-                    
-        logger.info(f"   📊 Sent {messages_sent} message(s) to {len(self.active_connections[data_type])} connection(s)")
-        
+
         # Clean up disconnected websockets
         for ws in disconnected:
             self.disconnect(ws, data_type)
@@ -150,8 +132,7 @@ manager = ConnectionManager()
 # Register callback with market data services to broadcast price updates
 async def broadcast_price_update(data_type: str, symbol: str, message: dict):
     """Callback for market data services to broadcast price updates"""
-    logger.info(f"🔥 broadcast_price_update called! type={data_type}, symbol={symbol}, message={message}")
-    logger.info(f"🔥 Active connections for {data_type}: {len(manager.active_connections[data_type])}")
+    # NO LOGGING - this is called for every trade update (multiple times per second)
     await manager.broadcast_to_subscribers(data_type, symbol, message)
 
 
@@ -294,9 +275,10 @@ async def get_symbol_price(symbol: str):
     """Get current price for a specific symbol (from Finnhub)"""
     symbol_upper = symbol.upper()
     price = finnhub_service.get_price(symbol_upper)
-    
+
     if price is None:
-        return {"error": "Symbol not found or not subscribed"}, 404
+        raise HTTPException(status_code=404, detail="Symbol not found or not subscribed")
+
     return {
         "symbol": symbol_upper,
         "price": price

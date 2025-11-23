@@ -28,7 +28,7 @@ export default function RiskMonitorTab() {
   const renderContent = () => {
     if (loading || !data) {
       return (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-center justify-center" style={{ minHeight: '100%', height: '100%' }}>
           <Text size="2" style={{ color: 'var(--slate-11)' }}>
             {loading ? "Loading..." : "No data available"}
           </Text>
@@ -43,6 +43,14 @@ export default function RiskMonitorTab() {
     const riskBgColor = data.risk_level.level === "High" ? 'var(--red-4)' :
                          data.risk_level.level === "Medium" ? 'var(--yellow-4)' :
                          'var(--green-4)';
+
+    const hypeColor = data.hype_level.level === "High" ? 'var(--purple-10)' :
+                       data.hype_level.level === "Medium" ? 'var(--blue-10)' :
+                       'var(--slate-11)';
+
+    const hypeBgColor = data.hype_level.level === "High" ? 'var(--purple-4)' :
+                         data.hype_level.level === "Medium" ? 'var(--blue-4)' :
+                         'var(--slate-3)';
 
     return (
       <>
@@ -72,7 +80,33 @@ export default function RiskMonitorTab() {
           </Text>
         </div>
 
-        <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+        <div className="px-3 py-4 flex-1" style={{ minHeight: '200px' }}>
+          <Text size="1" className="mb-3 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
+            Hype Level
+          </Text>
+          <Flex align="baseline" gap="2" className="mb-2">
+            <Text size="8" weight="bold" className="font-mono leading-none" style={{ color: hypeColor }}>
+              {data.hype_level.score}
+            </Text>
+            <Text size="2" style={{ color: 'var(--slate-11)' }}>/ 100</Text>
+          </Flex>
+          <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: 'var(--slate-6)' }}>
+            <div
+              className="h-full transition-all"
+              style={{ width: `${data.hype_level.score}%`, background: hypeColor }}
+            ></div>
+          </div>
+          <div className="mb-2">
+            <Badge size="1" style={{ background: hypeBgColor, color: hypeColor }}>
+              {data.hype_level.level}
+            </Badge>
+          </div>
+          <Text size="1" className="leading-relaxed" style={{ color: 'var(--slate-11)' }}>
+            {data.hype_level.summary || "Social sentiment and market enthusiasm"}
+          </Text>
+        </div>
+
+        <div className="px-3 py-3 border-t" style={{ borderColor: 'var(--slate-6)' }}>
           <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
             Market Overview
           </Text>
@@ -91,69 +125,20 @@ export default function RiskMonitorTab() {
             </Flex>
           </div>
         </div>
-
-        <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
-          <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
-            Technical
-          </Text>
-          <div className="space-y-2">
-            <Flex justify="between">
-              <Text size="1" style={{ color: 'var(--slate-11)' }}>RSI (14)</Text>
-              <Text size="1" className="font-mono" style={{ color: data.technical.rsi > 70 ? 'var(--red-10)' : data.technical.rsi < 30 ? 'var(--green-11)' : 'var(--slate-12)' }}>
-                {data.technical.rsi > 0 ? data.technical.rsi.toFixed(1) : '--'}
-              </Text>
-            </Flex>
-            <Flex justify="between">
-              <Text size="1" style={{ color: 'var(--slate-11)' }}>MACD</Text>
-              <Text size="1" className="font-mono" style={{ color: data.technical.macd >= 0 ? 'var(--green-11)' : 'var(--red-10)' }}>
-                {data.technical.macd !== 0 ? (data.technical.macd > 0 ? '+' : '') + data.technical.macd.toFixed(0) : '--'}
-              </Text>
-            </Flex>
-          </div>
-        </div>
-
-        <div className="px-3 py-3 flex-1">
-          <Text size="1" className="mb-2 uppercase tracking-wider" style={{ color: 'var(--slate-11)' }}>
-            Watchlist
-          </Text>
-          {data.watchlist.length === 0 ? (
-            <Text size="1" className="block mt-1" style={{ color: 'var(--slate-11)' }}>
-              No watchlist data
-            </Text>
-          ) : (
-            <div className="space-y-1.5">
-              {data.watchlist.map((item, idx) => (
-                <Flex
-                  key={item.ticker}
-                  justify="between"
-                  className={idx < data.watchlist.length - 1 ? "py-1.5 border-b" : "py-1.5"}
-                  style={{ borderColor: 'var(--slate-6)' }}
-                >
-                  <Text size="1" style={{ color: 'var(--slate-12)' }}>{item.ticker}</Text>
-                  <Text
-                    size="1"
-                    className="font-mono"
-                    style={{ color: item.change.startsWith('+') ? 'var(--green-11)' : 'var(--red-10)' }}
-                  >
-                    {item.change}
-                  </Text>
-                </Flex>
-              ))}
-            </div>
-          )}
-        </div>
       </>
     );
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--slate-6)' }}>
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-3 py-3 border-b shrink-0" style={{ borderColor: 'var(--slate-6)' }}>
         <Text size="2" weight="bold" style={{ color: 'var(--slate-12)' }}>
           Risk Monitor
         </Text>
       </div>
-      {renderContent()}
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {renderContent()}
+      </div>
     </div>
   );
 }

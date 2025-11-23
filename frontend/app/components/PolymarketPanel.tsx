@@ -27,13 +27,13 @@ export default function PolymarketPanel() {
   }, []);
 
   return (
-    <div className="border-r p-3 flex flex-col h-full" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-      <Flex justify="between" align="center" className="mb-2">
+    <div className="border-r p-3 flex flex-col" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '100%', height: '16rem' }}>
+      <Flex justify="between" align="center" className="mb-2 shrink-0">
         <Text size="1" weight="bold" className="uppercase tracking-wider" style={{ color: 'var(--slate-12)' }}>
           PREDICTION MARKETS
         </Text>
       </Flex>
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4 scrollbar-thin" style={{ minHeight: 0 }}>
         {loading ? (
           <Text size="1" style={{ color: 'var(--slate-11)' }}>Loading...</Text>
         ) : markets.length === 0 ? (

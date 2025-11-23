@@ -13,16 +13,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-async def test_alpaca():
-    """Test Alpaca BTC data fetch"""
-    print("\n🧪 Testing Alpaca...")
+async def test_finnhub():
+    """Test Finnhub BTC data fetch (SOURCE OF TRUTH)"""
+    print("\n🧪 Testing Finnhub...")
     try:
-        from app.services.alpaca import get_btc_data
-        data = await get_btc_data()
-        print(f"✅ Alpaca: BTC Price = ${data['btc_price']:,.2f}")
-        return True
+        from app.services.finnhub import get_btc_data, finnhub_service
+
+        # Check if Finnhub has live price data
+        btc_price = finnhub_service.get_price("BTC")
+        if btc_price:
+            print(f"✅ Finnhub WebSocket: BTC Price = ${btc_price:,.2f} (live)")
+            data = await get_btc_data()
+            print(f"✅ Finnhub get_btc_data(): ${data['btc_price']:,.2f}")
+            return True
+        else:
+            print(f"⚠️  Finnhub: WebSocket not connected or BTC not subscribed yet")
+            print(f"   This is expected if backend is not running with Finnhub enabled")
+            return False
     except Exception as e:
-        print(f"❌ Alpaca failed: {e}")
+        print(f"❌ Finnhub failed: {e}")
         return False
 
 
@@ -35,7 +44,7 @@ async def test_polymarket():
         markets = await client.fetch_btc_markets()
         print(f"✅ Polymarket: Fetched {len(markets)} markets")
         if markets:
-            print(f"   Example: {markets[0]['title'][:60]}... ({int(markets[0]['odds']*100)}%)")
+            print(f"   Example: {markets}")
         return True
     except Exception as e:
         print(f"❌ Polymarket failed: {e}")
@@ -110,7 +119,7 @@ async def main():
     
     results = await asyncio.gather(
         test_supabase(),
-        test_alpaca(),
+        test_finnhub(),
         test_polymarket(),
         test_reddit(),
         test_openai()

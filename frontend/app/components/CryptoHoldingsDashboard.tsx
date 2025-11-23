@@ -7,6 +7,7 @@ import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-chart
 import { useAlpacaWebSocket } from "@/hooks/useAlpacaWebSocket";
 import type { AlpacaMessage } from "@/lib/websocket";
 import { transformBarToChartData } from "@/lib/alpacaDataTransform";
+import { api } from "@/app/lib/api";
 
 interface Holding {
   id: string;
@@ -34,6 +35,9 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
   const hasInitialDataRef = useRef(false);
   const [localPrice, setLocalPrice] = useState<number | null>(currentPrice);
   const [localConnected, setLocalConnected] = useState(isConnected);
+  const [showLoadingText, setShowLoadingText] = useState(true);
+  const lastSignalTimeRef = useRef<number>(Date.now());
+  const [showConnected, setShowConnected] = useState(false);
 
   // Normalize symbol for comparison
   const normalizeSymbol = (s: string): string => {
@@ -52,10 +56,12 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       const barData = message.data;
       const messageSymbol = normalizeSymbol(barData.symbol);
       const holdingSymbol = normalizeSymbol(holding.symbol);
-      
+
       if (messageSymbol === holdingSymbol || barData.symbol === holding.symbol) {
+        setLocalConnected(true); // Mark as connected when receiving data
         setLocalPrice(barData.close);
-        
+        lastSignalTimeRef.current = Date.now(); // Update signal time on every bar
+
         if (seriesRef.current) {
           const chartData = transformBarToChartData(barData);
           
@@ -85,13 +91,25 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
     }
   };
 
-  // WebSocket connection for live prices
+  // WebSocket connection - only allow Bitcoin subscriptions to avoid port issues
   useAlpacaWebSocket({
-    symbols: [holding.symbol],
-    dataType: holding.type,
+    symbols: holding.type === "crypto" && (holding.symbol === "BTC" || holding.symbol?.includes("BTC")) ? ["BTC"] : [],
+    dataType: "crypto", // Force crypto type, only BTC will actually subscribe
     onMessage: handleMessage,
-    autoConnect: true,
+    autoConnect: holding.type === "crypto" && (holding.symbol === "BTC" || holding.symbol?.includes("BTC")),
   });
+
+  // Check if 10 seconds have passed since last signal
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() - lastSignalTimeRef.current > 10000) {
+        setShowConnected(false);
+      } else {
+        setShowConnected(true);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Update local state when props change
   useEffect(() => {
@@ -99,7 +117,16 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       setLocalPrice(currentPrice);
     }
     setLocalConnected(isConnected);
-  }, [currentPrice, isConnected]);
+
+    // Hide "Loading..." text after 10 seconds if no data
+    const timeout = setTimeout(() => {
+      if (!localPrice) {
+        setShowLoadingText(false);
+      }
+    }, 10000);
+
+    return () => clearTimeout(timeout);
+  }, [currentPrice, isConnected, localPrice]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -124,6 +151,8 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       leftPriceScale: {
         visible: false,
       },
+      handleScroll: false,
+      handleScale: false,
       autoSize: true,
     });
 
@@ -172,38 +201,39 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
   const priceChangePercent = displayPrice ? (priceChange / avgPriceNum) * 100 : 0;
 
   return (
-    <div 
+    <div
       className="border rounded-lg flex flex-col cursor-pointer hover:border-blue-500 transition-colors"
-      style={{ 
-        background: 'var(--slate-2)', 
+      style={{
+        background: 'var(--slate-3)',
         borderColor: 'var(--slate-6)',
-        minHeight: 'min(25vh, 200px)',
-        padding: 'clamp(0.75rem, 1.5vw, 1rem)'
+        height: '280px',
+        maxWidth: '380px',
+        padding: '0.75rem'
       }}
       onClick={onClick}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>
+      <div className="flex items-center justify-between mb-2 shrink-0">
+        <div className="flex items-baseline gap-2 overflow-hidden">
+          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)', whiteSpace: 'nowrap' }}>
             {holding.symbol}
           </Text>
-          <Text size="2" style={{ color: 'var(--slate-11)' }}>
+          <Text size="2" style={{ color: 'var(--slate-11)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {holding.name}
           </Text>
         </div>
-        <div className={`h-2 w-2 rounded-full ${localConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`h-2 w-2 rounded-full shrink-0 ${showConnected ? 'bg-green-500' : 'bg-red-500'}`} />
       </div>
 
       {/* Price Info */}
-      <div className="mb-2">
+      <div className="mb-2 shrink-0">
         <Text size="3" weight="bold" style={{ color: localPrice ? 'var(--slate-12)' : 'var(--slate-11)' }}>
-          {localPrice ? `$${localPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Loading...'}
+          {localPrice ? `$${localPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (showLoadingText ? 'Loading...' : '')}
         </Text>
         {localPrice && (
-          <Text 
-            size="2" 
-            style={{ 
+          <Text
+            size="2"
+            style={{
               color: priceChange >= 0 ? 'var(--green-11)' : 'var(--red-11)',
               marginLeft: '8px'
             }}
@@ -214,10 +244,10 @@ function HoldingCard({ holding, currentPrice, isConnected, onClick }: HoldingCar
       </div>
 
       {/* Mini Chart */}
-      <div ref={chartContainerRef} className="flex-1" style={{ minHeight: 'min(15vh, 120px)', height: 'min(15vh, 120px)', marginTop: 'clamp(0.5rem, 1vw, 0.5rem)' }} />
+      <div ref={chartContainerRef} className="flex-1 min-h-0" />
 
       {/* Holdings Info */}
-      <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--slate-6)' }}>
+      <div className="mt-2 pt-2 border-t shrink-0" style={{ borderColor: 'var(--slate-6)' }}>
         <div className="flex justify-between text-xs" style={{ color: 'var(--slate-11)' }}>
           <span>Qty: {holding.quantity}</span>
           <span>Value: ${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -234,46 +264,87 @@ interface CryptoHoldingsDashboardProps {
 
 export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }: CryptoHoldingsDashboardProps = {}) {
   const [filter, setFilter] = useState<HoldingsFilter>("all");
-  
+
   // Reset filter to "all" when resetFilter prop is true
   useEffect(() => {
     if (resetFilter) {
       setFilter("all");
     }
   }, [resetFilter]);
-  
-  const [allHoldings] = useState<Holding[]>([
+
+  const [allHoldings, setAllHoldings] = useState<Holding[]>([
     // Crypto Holdings
-    { id: "1", symbol: "BTC", name: "Bitcoin", quantity: "2.5", avgPrice: "42,350", type: "crypto" },
-    { id: "2", symbol: "ETH", name: "Ethereum", quantity: "18.3", avgPrice: "2,245", type: "crypto" },
-    { id: "3", symbol: "SOL", name: "Solana", quantity: "150", avgPrice: "98.50", type: "crypto" },
-    { id: "4", symbol: "ADA", name: "Cardano", quantity: "5,000", avgPrice: "0.58", type: "crypto" },
-    { id: "5", symbol: "AVAX", name: "Avalanche", quantity: "85", avgPrice: "35.20", type: "crypto" },
-    { id: "6", symbol: "MATIC", name: "Polygon", quantity: "3,200", avgPrice: "0.92", type: "crypto" },
+    { id: "1", symbol: "BTC", name: "Bitcoin", quantity: "0", avgPrice: "0", type: "crypto" },
+    { id: "2", symbol: "ETH", name: "Ethereum", quantity: "0", avgPrice: "0", type: "crypto" },
+    { id: "3", symbol: "SOL", name: "Solana", quantity: "0", avgPrice: "0", type: "crypto" },
+    { id: "4", symbol: "ADA", name: "Cardano", quantity: "0", avgPrice: "0", type: "crypto" },
+    { id: "5", symbol: "AVAX", name: "Avalanche", quantity: "0", avgPrice: "0", type: "crypto" },
+    { id: "6", symbol: "MATIC", name: "Polygon", quantity: "0", avgPrice: "0", type: "crypto" },
     // Stock Holdings
-    { id: "7", symbol: "AAPL", name: "Apple Inc.", quantity: "150", avgPrice: "178.50", type: "stocks" },
-    { id: "8", symbol: "MSFT", name: "Microsoft Corporation", quantity: "85", avgPrice: "385.20", type: "stocks" },
-    { id: "9", symbol: "GOOGL", name: "Alphabet Inc.", quantity: "120", avgPrice: "142.30", type: "stocks" },
-    { id: "10", symbol: "AMZN", name: "Amazon.com Inc.", quantity: "95", avgPrice: "155.80", type: "stocks" },
-    { id: "11", symbol: "TSLA", name: "Tesla Inc.", quantity: "75", avgPrice: "242.50", type: "stocks" },
-    { id: "12", symbol: "NVDA", name: "NVIDIA Corporation", quantity: "110", avgPrice: "495.75", type: "stocks" },
+    { id: "7", symbol: "AAPL", name: "Apple Inc.", quantity: "0", avgPrice: "0", type: "stocks" },
+    { id: "8", symbol: "MSFT", name: "Microsoft Corporation", quantity: "0", avgPrice: "0", type: "stocks" },
+    { id: "9", symbol: "GOOGL", name: "Alphabet Inc.", quantity: "0", avgPrice: "0", type: "stocks" },
+    { id: "10", symbol: "AMZN", name: "Amazon.com Inc.", quantity: "0", avgPrice: "0", type: "stocks" },
+    { id: "11", symbol: "TSLA", name: "Tesla Inc.", quantity: "0", avgPrice: "0", type: "stocks" },
+    { id: "12", symbol: "NVDA", name: "NVIDIA Corporation", quantity: "0", avgPrice: "0", type: "stocks" },
     // Option Holdings
-    { id: "13", symbol: "AAPL", name: "Apple Call Option", quantity: "10", avgPrice: "5.50", type: "options" },
-    { id: "14", symbol: "TSLA", name: "Tesla Put Option", quantity: "5", avgPrice: "12.30", type: "options" },
+    { id: "13", symbol: "AAPL", name: "Apple Call Option", quantity: "0", avgPrice: "0", type: "options" },
+    { id: "14", symbol: "TSLA", name: "Tesla Put Option", quantity: "0", avgPrice: "0", type: "options" },
     // ETF Holdings
-    { id: "15", symbol: "SPY", name: "SPDR S&P 500 ETF", quantity: "50", avgPrice: "450.25", type: "etfs" },
-    { id: "16", symbol: "QQQ", name: "Invesco QQQ Trust", quantity: "30", avgPrice: "380.50", type: "etfs" },
-    { id: "17", symbol: "VTI", name: "Vanguard Total Stock Market ETF", quantity: "25", avgPrice: "235.75", type: "etfs" },
+    { id: "15", symbol: "SPY", name: "SPDR S&P 500 ETF", quantity: "0", avgPrice: "0", type: "etfs" },
+    { id: "16", symbol: "QQQ", name: "Invesco QQQ Trust", quantity: "0", avgPrice: "0", type: "etfs" },
+    { id: "17", symbol: "VTI", name: "Vanguard Total Stock Market ETF", quantity: "0", avgPrice: "0", type: "etfs" },
   ]);
+
+  // Fetch real positions from API and update holdings
+  useEffect(() => {
+    const fetchPositions = async () => {
+      try {
+        const positions = await api.getPositions();
+
+        // Update holdings with real quantities and prices from positions
+        setAllHoldings(prev => prev.map(holding => {
+          // Find matching position by symbol
+          const position = positions.find((p: any) => {
+            // Normalize both symbols for comparison
+            const posSymbol = p.symbol.replace("/USD", "").replace("USD", "").replace("/", "");
+            const holdingSymbol = holding.symbol.replace("/USD", "").replace("USD", "").replace("/", "");
+            return posSymbol === holdingSymbol;
+          });
+
+          if (position) {
+            console.log(`Matched position for ${holding.symbol}:`, position);
+            return {
+              ...holding,
+              quantity: position.qty.toString(),
+              avgPrice: position.avg_entry_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            };
+          }
+          return holding;
+        }));
+      } catch (error) {
+        console.warn("Trading service unavailable - using default data:", error);
+        // Don't retry if service is not enabled
+        return;
+      }
+    };
+
+    fetchPositions();
+    // Only refresh if first fetch succeeds
+    // const interval = setInterval(fetchPositions, 10000);
+    // return () => clearInterval(interval);
+  }, []);
 
   const filteredHoldings = filter === "all" 
     ? allHoldings 
     : allHoldings.filter(h => h.type === filter);
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto" style={{ background: 'var(--slate-2)' }}>
-      {/* Dropdown Filter */}
-      <div className="mb-6">
+    <div className="h-full w-full flex flex-col overflow-hidden" style={{ background: 'var(--slate-2)' }}>
+      {/* Scrollable content area */}
+      <div className="flex-1 p-6 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Dropdown Filter */}
+        <div className="mb-6">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <button
@@ -282,38 +353,43 @@ export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }:
                 background: 'var(--slate-3)',
                 borderColor: 'var(--slate-6)',
                 color: 'var(--slate-12)',
-                padding: 'clamp(0.5rem, 1vw, 0.75rem) clamp(1rem, 2vw, 1.5rem)',
-                gap: 'clamp(0.25rem, 0.5vw, 0.5rem)',
-                fontSize: 'clamp(0.875rem, 1.25vw, 1rem)',
+                padding: '0.375rem 0.75rem',
+                gap: '0.25rem',
+                fontSize: '0.75rem',
+                minWidth: '9rem',
+                justifyContent: 'space-between'
               }}
             >
-              <Text size="3" weight="medium" style={{ fontSize: 'clamp(0.875rem, 1.25vw, 1rem)' }}>
-                Holding
+              <Text size="2" weight="medium" style={{ fontSize: '0.75rem' }}>
+                {filter === "all" ? "All Holdings" :
+                 filter === "crypto" ? "Crypto Holdings" :
+                 filter === "stocks" ? "Stock Holdings" :
+                 filter === "options" ? "Option Holdings" :
+                 "ETF Holdings"}
               </Text>
-              <ChevronDownIcon style={{ width: 'clamp(0.875rem, 1.25vw, 1rem)', height: 'clamp(0.875rem, 1.25vw, 1rem)' }} />
+              <ChevronDownIcon style={{ width: '0.75rem', height: '0.75rem' }} />
             </button>
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={() => setFilter("all")}>
+          <DropdownMenu.Content style={{ minWidth: '9rem', background: 'var(--slate-3)', border: '1px solid var(--slate-6)', color: 'var(--slate-12)' }}>
+            <DropdownMenu.Item onSelect={() => setFilter("all")} style={{ fontSize: '0.75rem', color: 'var(--slate-12)' }}>
               All Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("crypto")}>
+            <DropdownMenu.Item onSelect={() => setFilter("crypto")} style={{ fontSize: '0.75rem', color: 'var(--slate-12)' }}>
               Crypto Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("stocks")}>
+            <DropdownMenu.Item onSelect={() => setFilter("stocks")} style={{ fontSize: '0.75rem', color: 'var(--slate-12)' }}>
               Stock Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("options")}>
+            <DropdownMenu.Item onSelect={() => setFilter("options")} style={{ fontSize: '0.75rem', color: 'var(--slate-12)' }}>
               Option Holdings
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => setFilter("etfs")}>
+            <DropdownMenu.Item onSelect={() => setFilter("etfs")} style={{ fontSize: '0.75rem', color: 'var(--slate-12)' }}>
               ETF Holdings
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-      </div>
-      
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
           {filteredHoldings.map((holding) => (
             <HoldingCard
@@ -329,4 +405,3 @@ export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }:
     </div>
   );
 }
-

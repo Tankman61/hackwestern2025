@@ -31,6 +31,10 @@ class AlpacaTradingService:
         self.api_key = os.getenv("ALPACA_API_KEY")
         self.secret_key = os.getenv("ALPACA_SECRET_KEY")
         self.paper = os.getenv("ALPACA_PAPER_TRADING", "true").lower() == "true"
+
+        print("API KEY IS:", self.api_key)
+        print("SECRET KEY IS:", self.secret_key)
+        print("PAPER IS:", self.paper)
         
         if not self.api_key or not self.secret_key:
             logger.warning("Alpaca API keys not found, trading service disabled")
@@ -61,10 +65,12 @@ class AlpacaTradingService:
         """
         if not self.client:
             logger.warning("Trading client not initialized")
-            return None
+            raise ValueError("Trading client not initialized")
         
         try:
+            print("Client is:", self.client)
             account = self.client.get_account()
+            print("Account is:", account)
             return {
                 "id": account.id,
                 "account_number": account.account_number,
@@ -89,7 +95,8 @@ class AlpacaTradingService:
             }
         except Exception as e:
             logger.error(f"Error getting account: {e}")
-            return None
+            print("ERROR GETTING ACCOUNT:", e)
+            raise ValueError(f"Failed to fetch account information: {e}")
     
     # ========== POSITIONS ==========
     
@@ -201,27 +208,51 @@ class AlpacaTradingService:
             time_in_force: "day", "gtc", "ioc", "fok"
         """
         if not self.client:
-            logger.error("Trading client not initialized")
-            return None
+            error_msg = "Trading client not initialized - check Alpaca API keys"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         try:
+            # Normalize symbol for Alpaca (remove / and convert to uppercase)
+            alpaca_symbol = symbol.replace("/", "").replace("-", "").upper()
+            
             order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
             tif = TimeInForce[time_in_force.upper()]
             
             order_data = MarketOrderRequest(
-                symbol=symbol,
+                symbol=alpaca_symbol,
                 qty=qty,
                 side=order_side,
                 time_in_force=tif
             )
             
             order = self.client.submit_order(order_data)
-            logger.info(f"Market order placed: {side} {qty} {symbol}")
+            logger.info(f"Market order placed: {side} {qty} {alpaca_symbol}")
             
             return self._format_order(order)
         except Exception as e:
-            logger.error(f"Error placing market order: {e}")
-            return None
+            error_str = str(e)
+            # Parse Alpaca API errors for better user messages
+            if "insufficient balance" in error_str.lower() or "40310000" in error_str:
+                # Extract balance info from error message using regex
+                import re
+                try:
+                    available_match = re.search(r'"available":"([\d.]+)"', error_str)
+                    requested_match = re.search(r'"requested":"([\d.]+)"', error_str)
+                    
+                    if available_match and requested_match:
+                        available = float(available_match.group(1))
+                        requested = float(requested_match.group(1))
+                        error_msg = f"Insufficient balance: Requested ${requested:,.2f}, Available ${available:,.2f}. Please reduce order size."
+                    else:
+                        error_msg = f"Insufficient balance: {error_str}"
+                except:
+                    error_msg = f"Insufficient balance: {error_str}"
+            else:
+                error_msg = f"Error placing market order for {alpaca_symbol}: {error_str}"
+            
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
     
     async def place_limit_order(
         self,
@@ -242,15 +273,19 @@ class AlpacaTradingService:
             time_in_force: "day", "gtc", "ioc", "fok"
         """
         if not self.client:
-            logger.error("Trading client not initialized")
-            return None
+            error_msg = "Trading client not initialized - check Alpaca API keys"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         try:
+            # Normalize symbol for Alpaca (remove / and convert to uppercase)
+            alpaca_symbol = symbol.replace("/", "").replace("-", "").upper()
+            
             order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
             tif = TimeInForce[time_in_force.upper()]
             
             order_data = LimitOrderRequest(
-                symbol=symbol,
+                symbol=alpaca_symbol,
                 qty=qty,
                 side=order_side,
                 time_in_force=tif,
@@ -258,12 +293,32 @@ class AlpacaTradingService:
             )
             
             order = self.client.submit_order(order_data)
-            logger.info(f"Limit order placed: {side} {qty} {symbol} @ ${limit_price}")
+            logger.info(f"Limit order placed: {side} {qty} {alpaca_symbol} @ ${limit_price}")
             
             return self._format_order(order)
         except Exception as e:
-            logger.error(f"Error placing limit order: {e}")
-            return None
+            error_str = str(e)
+            # Parse Alpaca API errors for better user messages
+            if "insufficient balance" in error_str.lower() or "40310000" in error_str:
+                # Extract balance info from error message using regex
+                import re
+                try:
+                    available_match = re.search(r'"available":"([\d.]+)"', error_str)
+                    requested_match = re.search(r'"requested":"([\d.]+)"', error_str)
+                    
+                    if available_match and requested_match:
+                        available = float(available_match.group(1))
+                        requested = float(requested_match.group(1))
+                        error_msg = f"Insufficient balance: Requested ${requested:,.2f}, Available ${available:,.2f}. Please reduce order size."
+                    else:
+                        error_msg = f"Insufficient balance: {error_str}"
+                except:
+                    error_msg = f"Insufficient balance: {error_str}"
+            else:
+                error_msg = f"Error placing limit order for {alpaca_symbol}: {error_str}"
+            
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
     
     async def place_stop_order(
         self,
@@ -277,14 +332,19 @@ class AlpacaTradingService:
         Place a stop order
         """
         if not self.client:
-            return None
+            error_msg = "Trading client not initialized - check Alpaca API keys"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         try:
+            # Normalize symbol for Alpaca (remove / and convert to uppercase)
+            alpaca_symbol = symbol.replace("/", "").replace("-", "").upper()
+            
             order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
             tif = TimeInForce[time_in_force.upper()]
             
             order_data = StopOrderRequest(
-                symbol=symbol,
+                symbol=alpaca_symbol,
                 qty=qty,
                 side=order_side,
                 time_in_force=tif,
@@ -292,12 +352,32 @@ class AlpacaTradingService:
             )
             
             order = self.client.submit_order(order_data)
-            logger.info(f"Stop order placed: {side} {qty} {symbol} @ ${stop_price}")
+            logger.info(f"Stop order placed: {side} {qty} {alpaca_symbol} @ ${stop_price}")
             
             return self._format_order(order)
         except Exception as e:
-            logger.error(f"Error placing stop order: {e}")
-            return None
+            error_str = str(e)
+            # Parse Alpaca API errors for better user messages
+            if "insufficient balance" in error_str.lower() or "40310000" in error_str:
+                # Extract balance info from error message using regex
+                import re
+                try:
+                    available_match = re.search(r'"available":"([\d.]+)"', error_str)
+                    requested_match = re.search(r'"requested":"([\d.]+)"', error_str)
+                    
+                    if available_match and requested_match:
+                        available = float(available_match.group(1))
+                        requested = float(requested_match.group(1))
+                        error_msg = f"Insufficient balance: Requested ${requested:,.2f}, Available ${available:,.2f}. Please reduce order size."
+                    else:
+                        error_msg = f"Insufficient balance: {error_str}"
+                except:
+                    error_msg = f"Insufficient balance: {error_str}"
+            else:
+                error_msg = f"Error placing stop order for {alpaca_symbol}: {error_str}"
+            
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
     
     async def place_stop_limit_order(
         self,

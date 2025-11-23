@@ -279,12 +279,13 @@ export default function LiveAlpacaChart({ symbol, dataType }: LiveChartProps) {
     }
   };
 
-  // Use the WebSocket hook
+  // Use the WebSocket hook - only allow Bitcoin subscriptions to avoid port issues
+  const isBTC = dataType === "crypto" && (symbol === "BTC" || symbol?.includes("BTC"));
   const { subscribe, unsubscribe, isConnected: checkConnection } = useAlpacaWebSocket({
-    symbols: [symbol],
-    dataType,
+    symbols: isBTC ? ["BTC"] : [], // Only subscribe to BTC
+    dataType: "crypto", // Force crypto type for BTC
     onMessage: handleMessage,
-    autoConnect: true,
+    autoConnect: isBTC, // Only auto-connect for BTC
   });
 
   // Log connection status

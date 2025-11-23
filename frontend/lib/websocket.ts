@@ -28,10 +28,22 @@ export interface AlpacaQuote {
   ask_size: number;
 }
 
+export interface AlpacaOrderUpdate {
+  id: string;
+  ticker: string;
+  order_type: string;
+  amount: number;
+  limit_price?: number;
+  status: string;
+  created_at?: string;
+  side: string;
+}
+
 export type AlpacaMessage = 
   | { type: 'bar'; data: AlpacaBar }
   | { type: 'trade'; data: AlpacaTrade }
   | { type: 'quote'; data: AlpacaQuote }
+  | { type: 'order_update'; data: AlpacaOrderUpdate }
   | { type: 'error'; message: string }
   | { type: 'connected'; message: string }
   | { type: 'subscribed'; symbols: string[] };
@@ -47,18 +59,43 @@ class AlpacaWebSocketManager {
   private baseUrl: string;
   private subscribedSymbols: Set<string> = new Set();
   private dataType: AlpacaDataType;
+  private isConnecting: boolean = false;
+  private connectionPromise: Promise<void> | null = null;
 
   constructor(baseUrl: string = 'ws://localhost:8000', dataType: AlpacaDataType = 'stocks') {
     this.baseUrl = baseUrl;
     this.dataType = dataType;
   }
 
-  connect() {
+  async connect() {
+    // If already connected, return immediately
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
       return;
     }
 
+    // If already connecting, wait for that connection attempt
+    if (this.isConnecting && this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    // If in CONNECTING state, wait a bit and check again
+    if (this.ws?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
+    // Set connecting flag and create promise
+    this.isConnecting = true;
+    this.connectionPromise = this._doConnect();
+    
+    try {
+      await this.connectionPromise;
+    } finally {
+      this.isConnecting = false;
+      this.connectionPromise = null;
+    }
+  }
+
+  private async _doConnect() {
     // Clean up any existing connection before creating a new one
     if (this.ws) {
       try {
@@ -69,20 +106,46 @@ class AlpacaWebSocketManager {
       this.ws = null;
     }
 
+    // Check if backend is reachable first
+    try {
+      const httpUrl = this.baseUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+      const healthCheck = await fetch(`${httpUrl}/health`);
+      if (!healthCheck.ok) {
+        console.error(`❌ Backend health check failed: ${healthCheck.status} ${healthCheck.statusText}`);
+        this.notifyHandlers({
+          type: 'error',
+          message: `Backend server returned error: ${healthCheck.status}. Make sure the backend is running on ${httpUrl}`
+        });
+        this.isConnecting = false;
+        this.connectionPromise = null;
+        return;
+      }
+    } catch (error) {
+      console.error(`❌ Cannot reach backend server at ${this.baseUrl.replace('ws://', 'http://')}`);
+      console.error('   Make sure the backend server is running: uvicorn app.main:app --reload');
+      this.notifyHandlers({
+        type: 'error',
+        message: `Cannot connect to backend server. Make sure it's running on ${this.baseUrl.replace('ws://', 'http://')}`
+      });
+      this.isConnecting = false;
+      this.connectionPromise = null;
+      this.attemptReconnect();
+      return;
+    }
+
     try {
       const wsUrl = `${this.baseUrl}/ws/alpaca/${this.dataType}`;
-      console.log(`🔌 Attempting to connect to: ${wsUrl}`);
       
       // Connect to FastAPI WebSocket endpoint
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log(`✅ WebSocket connected to ${this.dataType} stream`);
         this.reconnectAttempts = 0;
+        this.isConnecting = false;
+        this.connectionPromise = null;
         
         // Resubscribe to symbols if reconnecting
         if (this.subscribedSymbols.size > 0) {
-          console.log(`🔄 Resubscribing to symbols:`, Array.from(this.subscribedSymbols));
           // Small delay to ensure connection is fully ready
           setTimeout(() => {
             this.subscribe(Array.from(this.subscribedSymbols));
@@ -100,59 +163,49 @@ class AlpacaWebSocketManager {
           const message: AlpacaMessage = JSON.parse(event.data);
           this.notifyHandlers(message);
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-          console.error('Raw data that failed to parse:', event.data);
+          // Only log parsing errors if it's actually a JSON parse error
+          // Chart update errors will be handled by the component
+          if (error instanceof SyntaxError) {
+            console.error('Failed to parse WebSocket message:', error);
+            console.error('Raw data that failed to parse:', event.data);
+          }
+          // Silently ignore other errors (like chart update errors that propagate)
         }
       };
 
       this.ws.onerror = (event: Event) => {
         // WebSocket error events don't provide much detail, but we can check the readyState
-        const readyStateText = 
-          this.ws?.readyState === WebSocket.CONNECTING ? 'CONNECTING' :
-          this.ws?.readyState === WebSocket.OPEN ? 'OPEN' :
-          this.ws?.readyState === WebSocket.CLOSING ? 'CLOSING' :
-          this.ws?.readyState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+        const readyState = this.ws?.readyState;
         
-        const errorDetails: any = {
-          readyState: this.ws?.readyState,
-          readyStateText,
-          url: `${this.baseUrl}/ws/alpaca/${this.dataType}`,
-          timestamp: new Date().toISOString()
-        };
-        
-        console.error('WebSocket error:', errorDetails);
-        console.error('Event details:', {
-          type: event.type,
-          target: event.target,
-          currentTarget: event.currentTarget
-        });
-        
-        // Provide more helpful error message
-        let errorMessage = 'WebSocket connection error';
-        if (this.ws?.readyState === WebSocket.CLOSED) {
-          errorMessage = 'WebSocket connection closed unexpectedly. Attempting to reconnect...';
-        } else if (!this.ws || this.ws.readyState === WebSocket.CLOSING) {
-          errorMessage = 'WebSocket is closing or not initialized';
+        // Only log errors if we're not already closed/closing (which is expected during cleanup)
+        if (readyState !== WebSocket.CLOSED && readyState !== WebSocket.CLOSING) {
+          const readyStateText = 
+            readyState === WebSocket.CONNECTING ? 'CONNECTING' :
+            readyState === WebSocket.OPEN ? 'OPEN' :
+            readyState === WebSocket.CLOSING ? 'CLOSING' :
+            readyState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+          
+          console.warn(`⚠️ WebSocket connection error (${readyStateText}). Will retry...`);
+          
+          // Only notify handlers if this is an unexpected error
+          if (readyState === WebSocket.CONNECTING) {
+            // Connection failed - will be handled by onclose
+            return;
+          }
         }
-        
-        this.notifyHandlers({
-          type: 'error',
-          message: errorMessage
-        });
       };
 
       this.ws.onclose = (event: CloseEvent) => {
-        console.log('WebSocket disconnected', {
-          code: event.code,
-          reason: event.reason || 'No reason provided',
-          wasClean: event.wasClean,
-          dataType: this.dataType
-        });
+        const wasClean = event.wasClean;
+        const code = event.code;
+        
         this.ws = null;
+        this.isConnecting = false;
+        this.connectionPromise = null;
         
         // Only attempt reconnect if it wasn't a clean close (code 1000)
         // or if it was an unexpected close
-        if (event.code !== 1000) {
+        if (code !== 1000) {
           this.attemptReconnect();
         }
       };
@@ -165,16 +218,21 @@ class AlpacaWebSocketManager {
   private attemptReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+      const delay = this.reconnectDelay * this.reconnectAttempts;
+      
       
       setTimeout(() => {
         this.connect();
-      }, this.reconnectDelay * this.reconnectAttempts);
+      }, delay);
     } else {
-      console.error('Max reconnection attempts reached');
+      console.error('❌ Max reconnection attempts reached');
+      console.error('   Please check:');
+      console.error('   1. Is the backend server running? (uvicorn app.main:app --reload)');
+      console.error(`   2. Is it accessible at ${this.baseUrl.replace('ws://', 'http://')}?`);
+      console.error('   3. Check backend logs for errors');
       this.notifyHandlers({
         type: 'error',
-        message: 'Failed to reconnect to Alpaca stream'
+        message: `Failed to reconnect after ${this.maxReconnectAttempts} attempts. Check backend server.`
       });
     }
   }
@@ -183,11 +241,11 @@ class AlpacaWebSocketManager {
     symbols.forEach(symbol => this.subscribedSymbols.add(symbol));
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn(`⏳ WebSocket not connected. Symbols [${symbols.join(', ')}] will be subscribed upon connection.`);
+      // Silently queue symbols for subscription when connection is established
+      // The connection handler will automatically resubscribe
       return;
     }
 
-    console.log(`📡 Subscribing to symbols:`, symbols);
     this.ws.send(JSON.stringify({
       action: 'subscribe',
       symbols: symbols
@@ -228,6 +286,8 @@ class AlpacaWebSocketManager {
     this.handlers.clear();
     this.subscribedSymbols.clear();
     this.reconnectAttempts = 0;
+    this.isConnecting = false;
+    this.connectionPromise = null;
   }
 
   isConnected(): boolean {

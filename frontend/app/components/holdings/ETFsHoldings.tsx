@@ -102,13 +102,13 @@ export default function ETFsHoldings({ initialSelectedHolding = null, onReturn }
     }
   };
 
-  // WebSocket connection for live prices
-  const { subscribe } = useAlpacaWebSocket({
-    symbols: selectedHolding ? [selectedHolding.symbol] : [],
-    dataType: "etfs",
-    onMessage: handleMessage,
-    autoConnect: true,
-  });
+  // WebSocket connection disabled - only Bitcoin subscriptions allowed to avoid port issues
+  // const { subscribe } = useAlpacaWebSocket({
+  //   symbols: selectedHolding ? [selectedHolding.symbol] : [],
+  //   dataType: "etfs",
+  //   onMessage: handleMessage,
+  //   autoConnect: true,
+  // });
 
   useEffect(() => {
     if (!selectedHolding || !chartContainerRef.current) {

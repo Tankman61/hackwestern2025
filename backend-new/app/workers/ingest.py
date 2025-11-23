@@ -9,8 +9,12 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Dict, Any, List
+from dotenv import load_dotenv
 
-from app.services.alpaca import get_btc_data
+# Load environment variables
+load_dotenv()
+
+from app.services.finnhub import get_btc_data  # SOURCE OF TRUTH for BTC price
 from app.services.polymarket import get_polymarket_client
 from app.services.reddit import get_reddit_client
 from app.services.openai_client import get_openai_client
@@ -75,14 +79,10 @@ class DataIngestWorker:
         
         # Handle exceptions
         if isinstance(btc_data, Exception):
-            logger.error(f"Alpaca fetch failed: {btc_data}")
-            btc_data = {
-                "btc_price": 96500.00,
-                "price_change_24h": 0.0,
-                "volume_24h": "$0",
-                "price_high_24h": 96500.00,
-                "price_low_24h": 96500.00
-            }
+            logger.error(f"❌ CRITICAL: Finnhub BTC price fetch failed: {btc_data}")
+            logger.error("❌ Cannot proceed without real-time price data from Finnhub WebSocket")
+            logger.error("❌ Skipping this ingest cycle. Check that Finnhub WebSocket is connected and BTC is subscribed.")
+            return  # Skip this cycle instead of using stale fallback data
         
         if isinstance(polymarket_markets, Exception):
             logger.error(f"Polymarket fetch failed: {polymarket_markets}")
