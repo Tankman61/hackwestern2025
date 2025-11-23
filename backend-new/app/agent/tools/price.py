@@ -41,8 +41,18 @@ async def get_current_price(symbol: str = "BTC") -> str:
             if price is None:
                 return f"ERROR: No price data in response for {symbol}"
 
+        # Format price for speech-friendly output
+        dollars = int(price)
+        cents = int((price - dollars) * 100)
+
+        # Create speech-friendly price string
+        if cents > 0:
+            price_speech = f"${dollars:,} and {cents} cents"
+        else:
+            price_speech = f"${dollars:,}"
+
         return f"""
-LIVE PRICE: ${price:,.2f}
+LIVE PRICE: {price_speech} (${price:,.2f})
 Symbol: {symbol}
 Source: Finnhub WebSocket (real-time)
 

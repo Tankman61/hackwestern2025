@@ -134,7 +134,7 @@ class ElevenLabsTTS:
             }
             await self.websocket.send(json.dumps(init_message))
 
-            logger.info(f"✅ Connected to ElevenLabs TTS (voice={self.voice_id}, model={model_id})")
+            logger.info(f"✅ Connected to ElevenLabs TTS (voice={self.voice_id}, model={model_id}, format={output_format})")
             return True
 
         except Exception as e:

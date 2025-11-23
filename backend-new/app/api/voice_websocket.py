@@ -39,9 +39,9 @@ class VoiceSession:
             # Create TTS instance
             self.tts = elevenlabs_service.create_tts()
             await self.tts.connect(
-                model_id="eleven_turbo_v2",
-                output_format="mp3_44100_128",
-                stability=0.7,
+                model_id="eleven_turbo_v2_5",
+                output_format="mp3_44100_192",
+                stability=0.7,  # Higher stability for cleaner audio
                 similarity_boost=0.8
             )
 
@@ -55,25 +55,56 @@ class VoiceSession:
     async def handle_audio_input(self, audio_base64: str):
         """Handle incoming audio from user"""
         try:
-            # Check if STT is still connected
+            # Check if STT needs reconnection
+            needs_reconnect = False
             if not self.stt or not self.stt.websocket:
-                logger.warning("STT disconnected, reconnecting...")
-                self.stt = elevenlabs_service.create_stt()
-                await self.stt.connect(sample_rate=16000, codec="pcm")
-                # Restart STT listener task
-                import asyncio
-                asyncio.create_task(self.listen_to_stt())
+                needs_reconnect = True
+            else:
+                # Try to detect if websocket is closed by attempting to send
+                try:
+                    # Test if websocket is still alive
+                    await self.stt.send_audio(audio_base64, sample_rate=16000, commit=False)
+                    return  # Success, no need to reconnect
+                except Exception as send_err:
+                    logger.warning(f"⚠️ STT send failed: {send_err}, reconnecting...")
+                    needs_reconnect = True
 
-            # Send to STT
-            await self.stt.send_audio(audio_base64, sample_rate=16000, commit=False)
+            if needs_reconnect:
+                # Close old connection if exists
+                if self.stt:
+                    try:
+                        await self.stt.close()
+                    except:
+                        pass
+
+                # Create new STT connection
+                logger.info("🔄 Creating new STT connection...")
+                self.stt = elevenlabs_service.create_stt()
+                success = await self.stt.connect(sample_rate=16000, codec="pcm")
+                if success:
+                    logger.info("✅ STT reconnected successfully")
+                    # Restart STT listener task
+                    import asyncio
+                    asyncio.create_task(self.listen_to_stt())
+                    # Now send the audio
+                    await self.stt.send_audio(audio_base64, sample_rate=16000, commit=False)
+                else:
+                    logger.error("❌ STT reconnection failed")
+                    await self.send_error("Failed to reconnect STT")
+                    return
 
         except Exception as e:
-            logger.error(f"Error processing audio input: {e}")
-            await self.send_error("Failed to process audio")
+            logger.error(f"❌ Error processing audio input: {e}", exc_info=True)
+            await self.send_error(f"Failed to process audio: {str(e)}")
 
     async def commit_audio(self):
         """Finalize current audio segment and get transcription"""
         try:
+            # Check if STT is connected (websockets doesn't have .closed attribute)
+            if not self.stt or not self.stt.websocket:
+                logger.warning("STT disconnected during commit, cannot commit audio")
+                return
+
             # Send commit signal to STT
             await self.stt.send_audio("", sample_rate=16000, commit=True)
 
@@ -181,9 +212,9 @@ class VoiceSession:
             from app.services.elevenlabs_service import elevenlabs_service
             tts = elevenlabs_service.create_tts()
             await tts.connect(
-                model_id="eleven_turbo_v2",
-                output_format="mp3_44100_128",
-                stability=0.7,
+                model_id="eleven_turbo_v2_5",
+                output_format="mp3_44100_192",
+                stability=0.7,  # Higher stability for cleaner audio
                 similarity_boost=0.8
             )
 
