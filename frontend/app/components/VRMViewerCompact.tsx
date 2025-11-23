@@ -49,36 +49,52 @@ export default function VRMViewerCompact({ onSceneClick, modelPath = "/horse_gir
     const now = Date.now();
     const timeSinceBlinkStart = now - blinkStartTimeRef.current;
 
-    // Blink every 3-5 seconds randomly
-    if (!isBlinkingRef.current && Math.random() < 0.005) {
+    // Blink every 2-4 seconds randomly (more frequent for testing)
+    if (!isBlinkingRef.current && Math.random() < 0.008) {
       isBlinkingRef.current = true;
       blinkStartTimeRef.current = now;
+      console.log('👁️ Starting blink animation');
     }
 
     if (isBlinkingRef.current) {
-      // Blink duration: 150ms
-      const blinkDuration = 150;
+      // Blink duration: 200ms (longer for visibility)
+      const blinkDuration = 200;
       const progress = Math.min(timeSinceBlinkStart / blinkDuration, 1);
 
       // Sine wave for smooth blink: sin(π * progress) creates smooth open->close->open
       const blinkValue = Math.sin(Math.PI * progress);
 
+      console.log('👁️ Blink progress:', progress.toFixed(2), 'value:', blinkValue.toFixed(2));
+
       // Apply blink to eye morph targets (common VRM blend shapes)
       const blinkTargets = ['Blink', 'Blink_L', 'Blink_R', 'EyeBlink', 'eyeBlink'];
 
+      let foundTarget = false;
       blinkTargets.forEach(targetName => {
         if (vrmRef.current?.expressionManager) {
           try {
-            vrmRef.current.expressionManager.setValue(targetName, blinkValue);
+            // Check if the blend shape exists
+            const preset = vrmRef.current.expressionManager.getPreset(targetName as any);
+            if (preset) {
+              vrmRef.current.expressionManager.setValue(targetName, blinkValue * 1.5); // Amplify for visibility
+              foundTarget = true;
+              console.log('👁️ Applied blink to:', targetName, 'value:', (blinkValue * 1.5).toFixed(2));
+            }
           } catch (e) {
             // Blend shape doesn't exist, skip
+            console.log('👁️ Blend shape not found:', targetName);
           }
         }
       });
 
+      if (!foundTarget) {
+        console.log('👁️ No blink blend shapes found in VRM model');
+      }
+
       // End blink
       if (progress >= 1) {
         isBlinkingRef.current = false;
+        console.log('👁️ Blink animation completed');
         // Reset to open eyes
         blinkTargets.forEach(targetName => {
           if (vrmRef.current?.expressionManager) {
