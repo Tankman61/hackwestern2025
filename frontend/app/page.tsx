@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Text, Flex, DropdownMenu, Button, ChevronDownIcon, Badge } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
+import { BarChartIcon, DashboardIcon, ActivityLogIcon, ExclamationTriangleIcon, GearIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import SideMenu from "./components/SideMenu";
 import CryptoPortfolio from "./components/portfolios/CryptoPortfolio";
 import StocksPortfolio from "./components/portfolios/StocksPortfolio";
@@ -19,7 +19,9 @@ import PolymarketPanel from "./components/PolymarketPanel";
 import TradingPanel from "./components/TradingPanel";
 import LiveAlpacaChart from "./components/LiveAlpacaChart";
 import CryptoHoldingsDashboard from "./components/CryptoHoldingsDashboard";
+import LandingPage from "./components/LandingPage";
 import { api, type RedditPost, type SentimentStats } from "@/app/lib/api";
+import VRMViewerCompact from "./components/VRMViewerCompact";
 
 type PortfolioView = "crypto" | "stocks" | "options" | "etfs" | null;
 type HoldingsView = "crypto-holdings" | "stocks-holdings" | "options-holdings" | "etfs-holdings" | null;
@@ -42,6 +44,9 @@ export default function Home() {
   const [sentimentExpanded, setSentimentExpanded] = useState(false);
   const [tradingPanelOpen, setTradingPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [characterSwapperOpen, setCharacterSwapperOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showLandingPage, setShowLandingPage] = useState(true);
   const [activeTradingTab, setActiveTradingTab] = useState<"risk" | "trade" | "portfolio" | "history">("risk");
   const [hoveredIcon, setHoveredIcon] = useState<"risk" | "trade" | "portfolio" | "history" | "settings" | null>(null);
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("low");
@@ -64,13 +69,23 @@ export default function Home() {
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [navbarHolding, setNavbarHolding] = useState<{ symbol: string; name: string } | null>(null);
 
+  // Character data
+  const characters = [
+    { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm" },
+    { id: "twinkie", name: "Twinkie", image: "/twinkie_profile.png", vrm: "/twinkie.vrm" },
+    { id: "caring_mother", name: "Caring Mother", image: "/caring_mother_profile.png", vrm: "/caring_mother.vrm" },
+    { id: "character4", name: "Character 4", image: "/character4_profile.png", vrm: "/character4.vrm" },
+    { id: "character5", name: "Character 5", image: "/character5_profile.png", vrm: "/character5.vrm" },
+  ];
+  const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
+
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
   const [sentimentStats, setSentimentStats] = useState<SentimentStats | null>(null);
   const [loadingReddit, setLoadingReddit] = useState(true);
   const [loadingSentiment, setLoadingSentiment] = useState(true);
 
-  // Handle WebSocket messages for live BTC price and alerts
+  // Handle WebSocket messages for live BTC price
   const handlePriceMessage = (message: AlpacaMessage) => {
     if (message.type === "bar" && message.data) {
       const barData = message.data;
@@ -102,42 +117,6 @@ export default function Home() {
           );
         }
       }
-    } else if (message.type === "ANOMALY_ALERT") {
-      // Handle anomaly alert - display in chat
-      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const alertMessage = `🚨 ${message.message}`;
-      
-      // Add to chat messages
-      setMessages(prev => [...prev, { 
-        role: "agent", 
-        text: alertMessage, 
-        time: timestamp 
-      }]);
-      
-      // Log to console for debugging
-      console.warn("🚨 ANOMALY ALERT:", message);
-      
-      // Open agent chat if not already open
-      if (!agentExpanded) {
-        setAgentExpanded(true);
-      }
-    } else if (message.type === "INTERRUPT") {
-      // Handle interrupt - display prominently
-      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const interruptMessage = `⚠️ INTERRUPT: ${message.message}`;
-      
-      // Add to chat messages
-      setMessages(prev => [...prev, { 
-        role: "agent", 
-        text: interruptMessage, 
-        time: timestamp 
-      }]);
-      
-      // Log to console
-      console.error("⚠️ INTERRUPT:", message);
-      
-      // Open agent chat
-      setAgentExpanded(true);
     }
   };
 
@@ -272,7 +251,7 @@ export default function Home() {
   const priceChangePrefix = parseFloat(priceChange) >= 0 ? '+' : '';
 
   return (
-    <main className="h-screen w-screen overflow-hidden" style={{ background: 'var(--slate-1)' }}>
+    <main className={`h-screen w-screen ${showLandingPage ? 'overflow-auto' : 'overflow-hidden'}`} style={{ background: 'var(--slate-1)' }}>
       {/* Top Bar */}
       <div className="h-16 border-b flex items-center px-4 justify-between" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
         <Flex align="center" gap="3">
@@ -310,6 +289,8 @@ export default function Home() {
             </Text>
           </div>
         </Flex>
+
+
       </div>
 
       {/* Side Menu */}
@@ -388,7 +369,7 @@ export default function Home() {
                 <div
                   className="shrink-0 border-r cursor-pointer flex items-center justify-center"
                   style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '16rem', height: '16rem' }}
-                  onClick={() => setAgentExpanded(!agentExpanded)}
+                  onClick={() => setCharacterSwapperOpen(true)}
                 >
                   <div className="w-[12.5rem] h-[12.5rem] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
@@ -655,11 +636,38 @@ export default function Home() {
                   <div className="p-4 border-b" style={{ borderColor: 'var(--slate-6)' }}>
                     <Flex justify="between" align="center">
                       <Flex align="center" gap="3">
-                        <div className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl border-2 shadow-lg relative" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
-                          <span>🎯</span>
+                        <div className="w-12 h-12 rounded-lg border-2 shadow-lg relative overflow-hidden" style={{ borderColor: 'var(--slate-6)' }}>
+                          <img
+                            src={selectedCharacter.image}
+                            alt={selectedCharacter.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback for missing images
+                              const target = e.target as HTMLImageElement;
+                              target.style.background = 'linear-gradient(135deg, var(--blue-9), var(--purple-9))';
+                              target.style.display = 'flex';
+                              target.style.alignItems = 'center';
+                              target.style.justifyContent = 'center';
+                              target.style.color = 'white';
+                              target.style.fontSize = '12px';
+                              target.style.fontWeight = 'bold';
+                              target.src = 'data:image/svg+xml;base64,' + btoa(`
+                                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect width="48" height="48" rx="8" fill="url(#gradient)"/>
+                                  <text x="24" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${selectedCharacter.name.charAt(0)}</text>
+                                  <defs>
+                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" style="stop-color:#3b82f6"/>
+                                      <stop offset="100%" style="stop-color:#8b5cf6"/>
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+                              `);
+                            }}
+                          />
                         </div>
                         <div>
-                          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>Agent Divergence</Text>
+                          <Text size="4" weight="bold" style={{ color: 'var(--slate-12)' }}>{selectedCharacter.name}</Text>
                           <Flex align="center" gap="1">
                             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--green-9)' }}></div>
                             <Text size="1" weight="medium" style={{ color: 'var(--green-11)' }}>Online & Monitoring</Text>
@@ -694,6 +702,135 @@ export default function Home() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Character Swapper Modal */}
+      <AnimatePresence>
+        {characterSwapperOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50"
+              style={{ background: 'rgba(0,0,0,0.9)' }}
+              onClick={() => setCharacterSwapperOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-8"
+              onClick={() => setCharacterSwapperOpen(false)}
+            >
+              <div
+                className="relative w-full h-[750px] overflow-hidden"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  boxShadow: 'none',
+                  maxWidth: '2000px' // Allow very wide modal for the huge characters
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                    {/* Close button positioned absolutely */}
+                    <button
+                      className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center rounded-full z-10 transition-all hover:scale-110"
+                      style={{
+                        background: 'rgba(0,0,0,0.7)',
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        color: 'white',
+                        backdropFilter: 'blur(4px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                      }}
+                      onClick={() => setCharacterSwapperOpen(false)}
+                    >
+                      <Text size="5" style={{ fontWeight: 'bold', lineHeight: 1 }}>✕</Text>
+                    </button>
+
+                {/* Character Grid */}
+                <div className="flex justify-center items-center h-full">
+                  <div className="flex gap-2">
+                    {characters.map((character, index) => (
+                      <motion.div
+                        key={character.id}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          console.log('🎭 Selecting character:', character.name);
+                          setSelectedCharacter(character);
+                          setCharacterSwapperOpen(false);
+                        }}
+                      >
+                        <motion.div
+                          className="h-[700px] rounded-3xl overflow-hidden relative"
+                          style={{
+                            width: '300px', // Double the width (150px -> 300px)
+                            background: 'rgba(0,0,0,0.3)', // Dark transparent background
+                            border: '4px solid rgba(255,255,255,0.4)', // Larger, more prominent border
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                          }}
+                          whileHover={{
+                            width: '600px', // Double the width (300px -> 600px)
+                            transition: { duration: 0.3, ease: "easeOut" }
+                          }}
+                        >
+                          <img
+                            src={character.image}
+                            alt={character.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Simple fallback - just show character initial
+                              const target = e.target as HTMLImageElement;
+                              target.style.background = 'linear-gradient(135deg, var(--blue-9), var(--purple-9))';
+                              target.style.display = 'flex';
+                              target.style.alignItems = 'center';
+                              target.style.justifyContent = 'center';
+                              target.style.color = 'white';
+                              target.style.fontSize = '48px';
+                              target.style.fontWeight = 'bold';
+                              target.textContent = character.name.charAt(0);
+                              target.src = '';
+                            }}
+                          />
+
+                          {/* Gradient fade overlay */}
+                          <div
+                            className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"
+                            style={{ pointerEvents: 'none' }}
+                          />
+
+                          {/* Text overlay at bottom */}
+                          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                            <h3 className="text-lg font-bold mb-1">{character.name}</h3>
+                            <p className="text-xs opacity-90">
+                              {character.id === 'horse_girl'
+                                ? 'A UWU Horse for a UWO Mascot'
+                                : character.id === 'twinkie'
+                                  ? 'The perfect snack'
+                                  : character.id === 'caring_mother'
+                                    ? 'Who\'s a good boy?'
+                                    : 'Trading companion with unique personality and insights.'
+                              }
+                            </p>
+                          </div>
+
+                        </motion.div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Landing Page - Full Screen Overlay */}
+      {showLandingPage && (
+        <div className="fixed inset-0 z-[100]" style={{ background: 'transparent' }}>
+          <LandingPage onEnter={() => setShowLandingPage(false)} />
+        </div>
+      )}
 
       {/* Settings Modal */}
       <AnimatePresence>

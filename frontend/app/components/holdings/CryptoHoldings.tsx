@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Flex, Text, Button, TextField } from "@radix-ui/themes";
-import { PlusIcon, TrashIcon, ArrowLeftIcon } from "@radix-ui/react-icons";
+import { PlusIcon, TrashIcon, ArrowLeftIcon, SpeakerLoudIcon, SpeakerOffIcon, PersonIcon } from "@radix-ui/react-icons";
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { useAlpacaWebSocket } from "@/hooks/useAlpacaWebSocket";
 import type { AlpacaMessage } from "@/lib/websocket";
@@ -11,6 +11,7 @@ import PolymarketPanel from "../PolymarketPanel";
 import { DropdownMenu, ChevronDownIcon } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, type RedditPost, type SentimentStats } from "@/app/lib/api";
+import VRMViewerCompact from "../VRMViewerCompact";
 
 type ChartType = "candlestick" | "bar" | "line" | "area" | "baseline" | "histogram";
 type TimeFrame = "1m" | "5m" | "10m" | "15m" | "30m" | "1h" | "4h" | "1d";
@@ -79,14 +80,16 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
           return holding;
         }));
       } catch (error) {
-        console.error("Failed to fetch positions:", error);
+        console.warn("Trading service unavailable - using default data:", error);
+        // Don't retry if service is not enabled
+        return;
       }
     };
 
     fetchPositions();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchPositions, 10000);
-    return () => clearInterval(interval);
+    // Only refresh if first fetch succeeds
+    // const interval = setInterval(fetchPositions, 10000);
+    // return () => clearInterval(interval);
   }, []);
   
   // Update selected holding when prop changes
@@ -160,7 +163,55 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
   ]);
   const [selectedSubreddit, setSelectedSubreddit] = useState<SubredditOption>("All");
   const [subredditDropdownOpen, setSubredditDropdownOpen] = useState(false);
-  
+
+  // Character states
+  const [characterSwapperOpen, setCharacterSwapperOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Voice agent states
+  const [isVoiceConnected, setIsVoiceConnected] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+  const [isAgentThinking, setIsAgentThinking] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
+  const [agentResponse, setAgentResponse] = useState<string>("");
+  const [voiceError, setVoiceError] = useState<string>("");
+
+  const wsVoiceRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingAudioRef = useRef(false);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Character data
+  const characters = [
+    { id: "horse_girl", name: "Horse Girl", image: "/horsegirl_profile.png", vrm: "/horse_girl.vrm" },
+    { id: "twinkie", name: "Twinkie", image: "/twinkie_profile.png", vrm: "/twinkie.vrm" },
+    { id: "caring_mother", name: "Caring Mother", image: "/caring_mother_profile.png", vrm: "/caring_mother.vrm" },
+    { id: "character4", name: "Character 4", image: "/character4_profile.png", vrm: "/character4.vrm" },
+    { id: "character5", name: "Character 5", image: "/character5_profile.png", vrm: "/character5.vrm" },
+  ];
+  const [selectedCharacter, setSelectedCharacter] = useState(characters[0]);
+
+  // Debug: Log when character changes
+  useEffect(() => {
+    console.log('🎭 Current character updated to:', selectedCharacter.name, selectedCharacter.vrm);
+  }, [selectedCharacter]);
+
+  // Debug: Log when modal state changes
+  useEffect(() => {
+    console.log('🎭 characterSwapperOpen state changed to:', characterSwapperOpen);
+  }, [characterSwapperOpen]);
+
+  // Cleanup voice agent on unmount
+  useEffect(() => {
+    return () => {
+      disconnectVoiceAgent();
+    };
+  }, []);
+
   // API Data States
   const [redditPosts, setRedditPosts] = useState<RedditPost[]>([]);
   const [sentimentStats, setSentimentStats] = useState<SentimentStats | null>(null);
@@ -249,6 +300,242 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
 
   const removeHolding = (id: string) => {
     setHoldings(holdings.filter((h) => h.id !== id));
+  };
+
+  // Voice Agent Functions (from voice-test page)
+  const getThreadId = () => {
+    if (typeof window === 'undefined') return `voice-session-${Date.now()}`;
+    let threadId = localStorage.getItem('voice_thread_id');
+    if (!threadId) {
+      threadId = `voice-session-${Date.now()}`;
+      localStorage.setItem('voice_thread_id', threadId);
+    }
+    return threadId;
+  };
+  const threadIdRef = useRef<string>(getThreadId());
+
+  const connectVoiceAgent = async () => {
+    try {
+      const ws = new WebSocket("ws://localhost:8000/ws/voice/agent");
+
+      ws.onopen = () => {
+        console.log("✅ Connected to voice WebSocket");
+        ws.send(JSON.stringify({
+          type: "start",
+          thread_id: threadIdRef.current
+        }));
+      };
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        handleVoiceMessage(data);
+      };
+
+      ws.onerror = (error) => {
+        console.error("Voice WebSocket error:", error);
+        setVoiceError("WebSocket connection error");
+      };
+
+      ws.onclose = () => {
+        console.log("Voice WebSocket closed");
+        setIsVoiceConnected(false);
+      };
+
+      wsVoiceRef.current = ws;
+    } catch (err) {
+      console.error("Failed to connect to voice:", err);
+      setVoiceError("Failed to connect to voice service");
+    }
+  };
+
+  const handleVoiceMessage = async (data: any) => {
+    console.log("📨 Voice message:", data);
+
+    switch (data.type) {
+      case "ready":
+        setIsVoiceConnected(true);
+        setVoiceError("");
+        break;
+
+      case "partial_transcript":
+        setVoiceTranscript(data.text);
+        break;
+
+      case "final_transcript":
+        setVoiceTranscript(data.text);
+        break;
+
+      case "agent_thinking":
+        setIsAgentThinking(data.is_thinking);
+        break;
+
+      case "agent_text":
+        setAgentResponse(data.text);
+        break;
+
+      case "agent_speaking":
+        setIsAgentSpeaking(data.is_speaking);
+        if (data.is_speaking) {
+          audioQueueRef.current = [];
+          if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current = null;
+          }
+          isPlayingAudioRef.current = false;
+        }
+        break;
+
+      case "agent_audio":
+        await playVoiceAudio(data.audio);
+        break;
+
+      case "error":
+        setVoiceError(data.message);
+        break;
+    }
+  };
+
+  const floatTo16BitPCM = (float32Array: Float32Array): ArrayBuffer => {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buffer;
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
+
+      streamRef.current = stream;
+
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      }
+
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      const bufferSize = 4096;
+      const processor = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (wsVoiceRef.current?.readyState === WebSocket.OPEN) {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const pcmData = floatTo16BitPCM(inputData);
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData)));
+
+          wsVoiceRef.current.send(JSON.stringify({
+            type: "audio_chunk",
+            audio: base64
+          }));
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioContextRef.current.destination);
+
+      processorRef.current = processor;
+      setIsRecording(true);
+      setVoiceTranscript("");
+
+      console.log("🎤 Started voice recording");
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    setIsRecording(false);
+
+    wsVoiceRef.current?.send(JSON.stringify({
+      type: "audio_end"
+    }));
+
+    console.log("🛑 Stopped voice recording");
+  };
+
+  const playVoiceAudio = async (base64Audio: string) => {
+    try {
+      if (isMuted) return; // Don't play if muted
+
+      audioQueueRef.current.push(base64Audio);
+
+      if (!isPlayingAudioRef.current) {
+        playNextVoiceAudio();
+      }
+    } catch (err) {
+      console.error("Error queueing audio:", err);
+    }
+  };
+
+  const playNextVoiceAudio = () => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingAudioRef.current = false;
+      return;
+    }
+
+    isPlayingAudioRef.current = true;
+    const base64Audio = audioQueueRef.current.shift()!;
+
+    const audioData = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+    const blob = new Blob([audioData], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+
+    const audio = new Audio(url);
+    currentAudioRef.current = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      currentAudioRef.current = null;
+      playNextVoiceAudio();
+    };
+
+    audio.onerror = (err) => {
+      console.error("Audio playback error:", err);
+      URL.revokeObjectURL(url);
+      currentAudioRef.current = null;
+      playNextVoiceAudio();
+    };
+
+    audio.play().catch(err => {
+      console.error("Error playing audio:", err);
+      URL.revokeObjectURL(url);
+      currentAudioRef.current = null;
+      playNextVoiceAudio();
+    });
+  };
+
+  const disconnectVoiceAgent = () => {
+    if (wsVoiceRef.current) {
+      wsVoiceRef.current.send(JSON.stringify({ type: "stop" }));
+      wsVoiceRef.current.close();
+      wsVoiceRef.current = null;
+    }
+
+    if (isRecording) {
+      stopVoiceRecording();
+    }
+
+    setIsVoiceConnected(false);
   };
 
   // Normalize symbol for comparison
@@ -1051,15 +1338,89 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
 
         {/* Bottom Data Panels - FIXED at bottom */}
         <div className="shrink-0 border-t grid grid-cols-[256px_1fr_1fr] gap-0" style={{ borderColor: 'var(--slate-6)', height: '16rem' }}>
-            {/* VTuber Profile Card - Match main page */}
+            {/* VTuber Profile Card - With VRM Viewer */}
             <div
-              className="border-r cursor-pointer flex items-center justify-center"
-              style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px', height: '256px' }}
+              className="border-r cursor-pointer flex items-center justify-center p-2"
+              style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)', width: '256px' }}
               onClick={() => setAgentExpanded(!agentExpanded)}
             >
-              <div className="w-[200px] h-[200px] rounded-lg flex items-center justify-center text-6xl border-2 shadow-lg relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--red-9), var(--red-10))', borderColor: 'var(--red-7)' }}>
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, transparent, rgba(139, 92, 246, 0.2))' }}></div>
-                <span className="relative z-10">🎯</span>
+              <div className="w-full h-full rounded-lg border-2 shadow-lg relative overflow-hidden" style={{ background: 'var(--slate-3)', borderColor: 'var(--slate-6)' }}>
+                <VRMViewerCompact
+                  key={`vrm-${selectedCharacter.id}`}
+                  onSceneClick={() => setAgentExpanded(!agentExpanded)}
+                  modelPath={selectedCharacter.vrm}
+                />
+
+                {/* Control Buttons */}
+                <div className="absolute top-3 left-3 flex gap-2">
+                  {/* Voice Agent Button - Microphone/Mute */}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+
+                      if (!isVoiceConnected) {
+                        // Connect and start recording
+                        await connectVoiceAgent();
+                        // Wait a bit for connection then start recording
+                        setTimeout(async () => {
+                          await startVoiceRecording();
+                          setIsMuted(false);
+                        }, 500);
+                      } else {
+                        if (isRecording) {
+                          // Stop recording but stay connected
+                          stopVoiceRecording();
+                          setIsMuted(true);
+                        } else {
+                          // Start recording again
+                          await startVoiceRecording();
+                          setIsMuted(false);
+                        }
+                      }
+                    }}
+                    className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
+                    style={{
+                      background: isRecording ? 'var(--red-9)' : 'transparent',
+                      borderColor: isVoiceConnected ? 'var(--green-9)' : 'var(--slate-6)',
+                      color: isRecording ? 'white' : 'var(--slate-11)'
+                    }}
+                    title={isRecording ? "🎤 Recording - Click to stop" : "🎤 Click to start voice"}
+                  >
+                    {isRecording ? (
+                      <SpeakerLoudIcon width="18" height="18" />
+                    ) : (
+                      <SpeakerOffIcon width="18" height="18" />
+                    )}
+                  </button>
+
+                  {/* Character Swap Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log('🎭 Character swap button clicked!');
+                      console.log('🎭 Current state before:', characterSwapperOpen);
+                      setCharacterSwapperOpen(prev => {
+                        console.log('🎭 setState called, prev value:', prev);
+                        return true;
+                      });
+                      console.log('🎭 setState has been called');
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    className="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110"
+                    style={{
+                      background: 'transparent',
+                      borderColor: 'var(--slate-6)',
+                      color: 'var(--slate-11)'
+                    }}
+                  >
+                    <PersonIcon width="18" height="18" />
+                  </button>
+                </div>
+
                 <div className="absolute bottom-3 right-3 w-4 h-4 rounded-full border-2" style={{ background: 'var(--green-9)', borderColor: 'var(--slate-2)' }}></div>
               </div>
             </div>
@@ -1296,12 +1657,27 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
     }
 
   return (
+    <>
     <div className="h-full w-full overflow-y-auto" style={{ background: 'var(--slate-1)' }}>
       {/* Header */}
       <div className="border-b px-6 py-4" style={{ background: 'var(--slate-2)', borderColor: 'var(--slate-6)' }}>
-        <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
-          Crypto Holdings
-        </Text>
+        <Flex justify="between" align="center">
+          <Text size="8" weight="bold" style={{ color: 'var(--slate-12)' }}>
+            Crypto Holdings
+            <span style={{ marginLeft: '10px', color: characterSwapperOpen ? 'red' : 'green' }}>
+              {characterSwapperOpen ? '🔴 MODAL STATE = TRUE' : '🟢 MODAL STATE = FALSE'}
+            </span>
+          </Text>
+          <Button
+            onClick={() => {
+              console.log('🧪 TEST BUTTON: Setting characterSwapperOpen to TRUE');
+              setCharacterSwapperOpen(true);
+            }}
+            style={{ background: 'var(--blue-9)', color: 'white', cursor: 'pointer' }}
+          >
+            🧪 TEST: Open Modal
+          </Button>
+        </Flex>
       </div>
 
       {/* Add New Holding Form */}
@@ -1402,5 +1778,112 @@ export default function CryptoHoldings({ initialSelectedHolding = null, onReturn
         </div>
       </div>
     </div>
+
+    {/* Character Swapper Modal - Outside scrollable container */}
+    <AnimatePresence>
+        {characterSwapperOpen && (
+          <>
+            {console.log('🎭🎭🎭 RENDERING CHARACTER MODAL NOW!!! 🎭🎭🎭')}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999]"
+              style={{ background: 'rgba(0,0,0,0.9)' }}
+              onClick={() => setCharacterSwapperOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-8"
+              onClick={() => setCharacterSwapperOpen(false)}
+            >
+              <div
+                className="relative w-full h-[750px] overflow-hidden"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  boxShadow: 'none',
+                  maxWidth: '2000px'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Close button */}
+                <button
+                  className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center rounded-full z-10 transition-all hover:scale-110"
+                  style={{
+                    background: 'rgba(0,0,0,0.7)',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    color: 'white',
+                    backdropFilter: 'blur(4px)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                  }}
+                  onClick={() => setCharacterSwapperOpen(false)}
+                >
+                  <Text size="5" style={{ fontWeight: 'bold', lineHeight: 1 }}>✕</Text>
+                </button>
+
+                {/* Character Grid */}
+                <div className="flex justify-center items-center h-full">
+                  <div className="flex gap-2">
+                    {characters.map((character) => (
+                      <motion.div
+                        key={character.id}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          console.log('🎭 Selecting character:', character.name, character.vrm);
+                          setSelectedCharacter(character);
+                          setCharacterSwapperOpen(false);
+                          console.log('🎭 Character swap complete!');
+                        }}
+                      >
+                        <motion.div
+                          className="h-[700px] rounded-3xl overflow-hidden relative"
+                          style={{
+                            width: '300px',
+                            background: 'rgba(0,0,0,0.3)',
+                            border: '4px solid rgba(255,255,255,0.4)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                          }}
+                          whileHover={{
+                            width: '600px',
+                            transition: { duration: 0.3, ease: "easeOut" }
+                          }}
+                        >
+                          <img
+                            src={character.image}
+                            alt={character.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div
+                            className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"
+                            style={{ pointerEvents: 'none' }}
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                            <h3 className="text-lg font-bold mb-1">{character.name}</h3>
+                            <p className="text-xs opacity-90">
+                              {character.id === 'horse_girl'
+                                ? 'A UWU Horse for a UWO Mascot'
+                                : character.id === 'twinkie'
+                                  ? 'The perfect snack'
+                                  : character.id === 'caring_mother'
+                                    ? 'Who\'s a good boy?'
+                                    : 'Trading companion with unique personality and insights.'
+                              }
+                            </p>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

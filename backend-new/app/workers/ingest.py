@@ -130,24 +130,96 @@ class DataIngestWorker:
         logger.info(f"✅ Inserted market_context: sentiment={market_context_data['sentiment']}, hype={market_context_data['hype_score']}")
         
         # STEP 5: Upsert feed_items (Polymarket)
-        polymarket_feed_items = [
-            {
+        # First, get previous feed_items to calculate changes
+        previous_items_result = self.db.client.table("feed_items")\
+            .select("title, metadata")\
+            .eq("source", "POLYMARKET")\
+            .execute()
+        
+        previous_markets = {}
+        if previous_items_result.data:
+            for item in previous_items_result.data:
+                title = item["title"]
+                metadata = item["metadata"] or {}
+                previous_odds = metadata.get("odds")
+                if previous_odds is not None:
+                    previous_markets[title.strip()] = float(previous_odds)
+        
+        logger.info(f"📊 Found {len(previous_markets)} previous Polymarket markets for change calculation")
+        if previous_markets:
+            logger.info(f"   Previous market titles: {list(previous_markets.keys())[:3]}...")  # Log first 3
+        
+        # Calculate changes and prepare feed_items
+        polymarket_feed_items = []
+        markets_with_changes = 0
+        markets_new = 0
+        markets_no_change = 0
+        
+        for market in polymarket_markets:
+            title = market["title"].strip()  # Normalize title
+            current_odds = float(market["odds"])
+            
+            # Calculate change from previous odds
+            change_str = "+0%"
+            matched = False
+            
+            if title in previous_markets:
+                matched = True
+                previous_odds = previous_markets[title]
+                if previous_odds > 0:
+                    change_percent = ((current_odds - previous_odds) / previous_odds) * 100
+                    
+                    # Always log the calculation for debugging
+                    logger.info(f"🔍 {title[:60]}: {previous_odds:.4f} → {current_odds:.4f} = {change_percent:+.2f}%")
+                    
+                    # Format change string (lowered threshold to 0.05% for better visibility)
+                    if abs(change_percent) < 0.05:
+                        change_str = "+0%"
+                        markets_no_change += 1
+                    else:
+                        change_str = f"{change_percent:+.1f}%"
+                        markets_with_changes += 1
+            else:
+                markets_new += 1
+                logger.debug(f"🆕 New market: {title[:60]}")
+                if market.get("change"):
+                    # Use provided change if available (e.g., from mock data)
+                    change_str = market["change"]
+                else:
+                    change_str = "+0%"
+            
+            polymarket_feed_items.append({
                 "source": "POLYMARKET",
-                "title": market["title"],
+                "title": title,
                 "metadata": {
                     "odds": market["odds"],
                     "volume": market["volume"],
-                    "change": market["change"],
+                    "change": change_str,
                     "url": market["url"]
                 },
                 "created_at": datetime.utcnow().isoformat()
-            }
-            for market in polymarket_markets
-        ]
+            })
         
         if polymarket_feed_items:
+            # Log all calculated changes before upserting
+            for item in polymarket_feed_items[:3]:  # Log first 3
+                change = item["metadata"].get("change", "+0%")
+                logger.info(f"   📈 '{item['title'][:50]}' → {change}")
+            
             await self.db.upsert_feed_items(polymarket_feed_items)
-            logger.info(f"✅ Upserted {len(polymarket_feed_items)} Polymarket feed items")
+            
+            # Log detailed stats about changes
+            if len(previous_markets) == 0:
+                logger.info(f"✅ Upserted {len(polymarket_feed_items)} Polymarket feed items (FIRST CYCLE - all markets are new, changes will appear next cycle)")
+            else:
+                logger.info(
+                    f"✅ Upserted {len(polymarket_feed_items)} Polymarket feed items: "
+                    f"{markets_with_changes} with changes, {markets_no_change} no change, {markets_new} new"
+                )
+                if markets_with_changes > 0:
+                    logger.info(f"🎯 Change percentages calculated! {markets_with_changes} markets show real changes")
+                elif markets_no_change > 0:
+                    logger.info(f"⚠️  All markets matched but changes are <0.1% (too small to display)")
         
         # STEP 6: Upsert feed_items (Reddit)
         reddit_feed_items = [

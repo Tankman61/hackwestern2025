@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: vibe-trade-backend
+    runtime: python3
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: POLYMARKET_API_KEY
+        sync: false
+
+  - type: web
+    name: vibe-trade-frontend
+    runtime: static
+    buildCommand: npm run build
+    staticPublishPath: ./out
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://vibe-trade-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /(.*)
+        destination: /index.html

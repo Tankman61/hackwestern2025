@@ -294,11 +294,13 @@ class PolymarketClient:
                         market_url = "https://polymarket.com"
                         logger.warning(f"⚠️  No URL available for: {title[:50]}")
 
+                    # Calculate change percentage (will be calculated in ingest worker based on previous data)
+                    # For now, set to "+0%" - will be updated by comparing with previous feed_items
                     results.append({
                         "title": title[:200],
                         "odds": round(yes_prob, 2),
                         "volume": volume_str,
-                        "change": "+0%",
+                        "change": None,  # Will be calculated in ingest worker
                         "url": market_url
                     })
                     

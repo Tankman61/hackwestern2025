@@ -323,14 +323,16 @@ export default function CryptoHoldingsDashboard({ onHoldingClick, resetFilter }:
           return holding;
         }));
       } catch (error) {
-        console.error("Failed to fetch positions:", error);
+        console.warn("Trading service unavailable - using default data:", error);
+        // Don't retry if service is not enabled
+        return;
       }
     };
 
     fetchPositions();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchPositions, 10000);
-    return () => clearInterval(interval);
+    // Only refresh if first fetch succeeds
+    // const interval = setInterval(fetchPositions, 10000);
+    // return () => clearInterval(interval);
   }, []);
 
   const filteredHoldings = filter === "all" 
