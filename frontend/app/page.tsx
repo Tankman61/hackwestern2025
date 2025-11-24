@@ -54,7 +54,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState("");
   const [positionSize, setPositionSize] = useState("");
   const [tradeType, setTradeType] = useState<"long" | "short">("long");
-  const [stopLoss, setStopLoss] = useState("97,200");
+  const [stopLoss, setStopLoss] = useState("85,000");
   const [takeProfit, setTakeProfit] = useState("100,500");
   const [messages, setMessages] = useState<Array<{ role: "agent" | "user", text: string, time: string }>>([]);
   const [selectedSubreddit, setSelectedSubreddit] = useState<SubredditOption>("All");
