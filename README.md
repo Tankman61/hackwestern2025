@@ -6,8 +6,6 @@ VibeTrade is a real-time BTC trading terminal powered by an agentic LLM, live ma
   <img src="https://ibb.co/xqwvHPRQ" width="700"/>
 </p>
 
----
-
 ## What it does
 
 * Streams **live BTC price** from Alpaca
@@ -31,7 +29,7 @@ orders → portfolio panel.
   <img src="https://ibb.co/1YGRRnqX" width="700"/>
 </p>
 
----
+
 
 ## **How it works**
 
@@ -77,7 +75,7 @@ Voice:
 * ElevenLabs STT (input)
 * ElevenLabs V3 TTS (output with emotion tags)
 
----
+
 
 ## Tech Stack
 
@@ -259,7 +257,7 @@ graph TB
     class frontend frontendBg
 ```
 
----
+
 
 ## Running locally
 
@@ -313,7 +311,7 @@ For frontend:
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
----
+
 
 ## Other demo features
 
@@ -321,7 +319,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 * pressing '=' makes a request for the backend to simulate a "moon", causing the agent to respond in real-time to take advantage
 * pressing '\' resets this behavior
 
----
+
 
 ## Status
 
@@ -329,5 +327,5 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 * Not production-ready
 * Pretty much all features however **do actually work** end-to-end
 
----
+
  
