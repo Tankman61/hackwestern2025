@@ -31,8 +31,16 @@ def call_agent(state: AgentState) -> AgentState:
     """
     messages = list(state["messages"])
 
-    # Add system prompt at the start if not present
-    if not messages or not isinstance(messages[0], SystemMessage):
+    # ALWAYS ensure personality prompt is first, even if there's already a SystemMessage (alert)
+    # This fixes the bug where system alerts override the personality prompt
+    # Result: Agent will have BOTH personality + alert context
+    has_personality = (
+        messages and
+        isinstance(messages[0], SystemMessage) and
+        messages[0].content.startswith("You are Akira")  # Check if it's our personality
+    )
+
+    if not has_personality:
         messages = [SystemMessage(content=SYSTEM_PROMPT)] + list(messages)
 
     # Call LLM with tools

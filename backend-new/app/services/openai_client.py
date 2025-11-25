@@ -42,7 +42,8 @@ class OpenAIClient:
                 "sentiment": str ("BULLISH" | "BEARISH" | "PANIC"),
                 "keywords": list[str],
                 "polymarket_summary": str,
-                "summary": str,
+                "summary": str,  # Risk level summary
+                "hype_summary": str,  # Hype level summary
                 "sentiment_bullish": int,
                 "sentiment_bearish": int
             }
@@ -70,10 +71,15 @@ Analyze the data and return ONLY a JSON object with this structure:
   "sentiment": "<BULLISH|BEARISH|PANIC>",
   "keywords": ["<top", "keywords", "from", "posts", "and", "comments>"],
   "polymarket_summary": "<one sentence about prediction market odds>",
-  "summary": "<2-3 sentence market summary INCLUDING insights from highly-upvoted comments>",
+  "summary": "<2-3 sentences describing RISK LEVEL - price movement, concerns, caution>",
+  "hype_summary": "<2-3 sentences describing HYPE LEVEL - social sentiment, community enthusiasm, FOMO/FUD>",
   "sentiment_bullish": <count of bullish posts AND highly-upvoted bullish comments>,
   "sentiment_bearish": <count of bearish/panic posts AND highly-upvoted bearish comments>
 }}
+
+IMPORTANT:
+- "summary" = RISK LEVEL description (focus on price action, bearish/bullish sentiment, caution)
+- "hype_summary" = HYPE LEVEL description (focus on social media enthusiasm, community energy, FOMO vs FUD)
 
 Analysis Guidelines:
 1. Price movement direction and magnitude
@@ -189,7 +195,8 @@ Analysis Guidelines:
             "sentiment": sentiment,
             "keywords": bullish_keywords[:3] if sentiment == "BULLISH" else bearish_keywords[:3],
             "polymarket_summary": "Polymarket data unavailable",
-            "summary": f"Bitcoin at ${btc_price:,.2f}, {price_change_24h:+.2f}% (24h). Using fallback analysis with comment sentiment.",
+            "summary": "",  # Fallback - OpenAI API failed
+            "hype_summary": "",  # Fallback - OpenAI API failed
             "sentiment_bullish": int(bullish_count),
             "sentiment_bearish": int(bearish_count)
         }

@@ -44,6 +44,7 @@ CREATE TABLE public.market_context (
     risk_score INT CHECK (risk_score BETWEEN 0 AND 100),
 
     summary TEXT NOT NULL,
+    hype_summary TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

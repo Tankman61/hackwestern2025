@@ -112,12 +112,6 @@ export default function RiskMonitorTab() {
           </Text>
           <div className="space-y-2">
             <Flex justify="between">
-              <Text size="1" style={{ color: 'var(--slate-11)' }}>24h Volume</Text>
-              <Text size="1" weight="bold" className="font-mono" style={{ color: 'var(--slate-12)' }}>
-                {data.market_overview.volume_24h}
-              </Text>
-            </Flex>
-            <Flex justify="between">
               <Text size="1" style={{ color: 'var(--slate-11)' }}>24h Range</Text>
               <Text size="1" className="font-mono" style={{ color: 'var(--slate-12)' }}>
                 ${(data.market_overview.price_range_24h.low / 1000).toFixed(1)}k - ${(data.market_overview.price_range_24h.high / 1000).toFixed(1)}k

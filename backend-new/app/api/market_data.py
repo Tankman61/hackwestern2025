@@ -50,7 +50,6 @@ async def get_risk_monitor():
             "market_overview": {
                 "btc_price": 0,
                 "price_change_24h": 0,
-                "volume_24h": "$0",
                 "price_range_24h": {"low": 0, "high": 0}
             },
             "technical": {"rsi": 0, "macd": 0},
@@ -103,12 +102,12 @@ async def get_risk_monitor():
         },
         "hype_level": {
             "score": hype_score,
-            "level": hype_level
+            "level": hype_level,
+            "summary": context.get("hype_summary", "")
         },
         "market_overview": {
             "btc_price": float(context.get("btc_price", 0)),
             "price_change_24h": float(context.get("price_change_24h", 0)),
-            "volume_24h": context.get("volume_24h", "$0"),
             "price_range_24h": {
                 "low": float(context.get("price_low_24h", 0)) if context.get("price_low_24h") else 0,
                 "high": float(context.get("price_high_24h", 0)) if context.get("price_high_24h") else 0

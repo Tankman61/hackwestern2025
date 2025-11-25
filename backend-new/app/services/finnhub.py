@@ -592,8 +592,10 @@ finnhub_service = FinnhubMarketDataService()
 
 async def get_btc_data() -> Dict[str, any]:
     """
-    Get current BTC price data from Finnhub WebSocket via FastAPI (SOURCE OF TRUTH).
+    Get current BTC price data from Finnhub REST API /quote endpoint (FREE tier).
     Used by Data Ingest Worker to populate database.
+
+    Uses REST instead of WebSocket since ingest only runs every 10 minutes.
 
     Returns:
         {
@@ -607,20 +609,56 @@ async def get_btc_data() -> Dict[str, any]:
     import httpx
     import os
 
-    # Prefer live price directly from Finnhub service to avoid HTTP dependency
-    btc_price = finnhub_service.get_price("BTC") or finnhub_service.get_price("BTCUSD")
-    if btc_price is None:
-        logger.error("❌ BTC price not available from Finnhub live cache. Is Finnhub WebSocket connected and subscribed?")
-        raise ValueError("BTC price not available from Finnhub.")
+    api_key = os.getenv("FINNHUB_API_KEY")
+    if not api_key:
+        logger.error("❌ FINNHUB_API_KEY not set in environment")
+        raise ValueError("FINNHUB_API_KEY required for BTC price data")
 
-    logger.info(f"✅ Got BTC price from Finnhub service: ${btc_price:,.2f}")
+    try:
+        # Use Finnhub FREE REST endpoint: /quote
+        # Supports crypto on free tier with symbol format: BINANCE:BTCUSDT
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token={api_key}",
+                timeout=10.0
+            )
+            response.raise_for_status()
+            data = response.json()
 
-    # For MVP: Return live price with estimated 24h values
-    # TODO: Track historical data to calculate real 24h change, high, low, volume
-    return {
-        "btc_price": round(btc_price, 2),
-        "price_change_24h": 0.0,  # TODO: Calculate from historical data
-        "volume_24h": "$0",  # TODO: Aggregate from trade volumes
-        "price_high_24h": round(btc_price, 2),  # TODO: Track 24h high
-        "price_low_24h": round(btc_price, 2)  # TODO: Track 24h low
-    }
+            # Response format:
+            # {
+            #   "c": 42951.23,  // current price
+            #   "d": -120.50,   // change
+            #   "dp": -0.28,    // percent change
+            #   "h": 43220.00,  // high price of the day
+            #   "l": 42810.12,  // low price of the day
+            #   "o": 43100.00,  // open price of the day
+            #   "pc": 43071.73, // previous close
+            #   "t": 1700923240 // timestamp
+            # }
+
+            btc_price = data.get("c")  # current price
+            if not btc_price or btc_price <= 0:
+                raise ValueError(f"Invalid BTC price from Finnhub: {btc_price}")
+
+            # Extract 24h data from response
+            price_change_pct = data.get("dp", 0.0)  # percent change
+            price_high = data.get("h", btc_price)   # high of day
+            price_low = data.get("l", btc_price)    # low of day
+
+            logger.info(f"✅ Got BTC price from Finnhub REST API: ${btc_price:,.2f} ({price_change_pct:+.2f}%)")
+
+            return {
+                "btc_price": round(btc_price, 2),
+                "price_change_24h": round(price_change_pct, 2),
+                "volume_24h": "$0",  # Not available in /quote endpoint
+                "price_high_24h": round(price_high, 2),
+                "price_low_24h": round(price_low, 2)
+            }
+
+    except httpx.HTTPError as e:
+        logger.error(f"❌ Finnhub REST API request failed: {e}")
+        raise ValueError(f"Failed to fetch BTC price from Finnhub: {e}")
+    except Exception as e:
+        logger.error(f"❌ Error processing Finnhub response: {e}")
+        raise ValueError(f"BTC price not available from Finnhub: {e}")

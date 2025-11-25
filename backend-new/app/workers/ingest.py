@@ -161,6 +161,7 @@ class DataIngestWorker:
         market_context_data = {
             "risk_score": 0,  # Monitor Worker calculates this
             "summary": analysis.get("summary", "Market data processed"),
+            "hype_summary": analysis.get("hype_summary", ""),
             "btc_price": btc_data["btc_price"],
             "price_change_24h": btc_data["price_change_24h"],
             "volume_24h": btc_data["volume_24h"],

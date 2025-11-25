@@ -204,6 +204,23 @@ class AnomalyWorker:
         delta_pct = top_anomaly.get('delta_pct', 0)
         delta = top_anomaly.get('delta', 0)
 
+        # Fetch previous close from Finnhub REST to get accurate base price
+        import httpx
+        import os
+        previous_close = 85000  # fallback
+        try:
+            api_key = os.getenv("FINNHUB_API_KEY")
+            if api_key:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token={api_key}",
+                        timeout=5.0
+                    )
+                    data = response.json()
+                    previous_close = data.get("pc", 85000)  # pc = previous close
+        except Exception as e:
+            logger.warning(f"Failed to fetch previous close from Finnhub, using fallback: {e}")
+
         alert_context = {
             "alert_type": "ANOMALY_ALERT",
             "risk_score": risk_score if risk_score else (95 if delta < 0 else 0),
@@ -212,7 +229,7 @@ class AnomalyWorker:
             "price_change_24h": delta_pct,
         }
 
-        alert_message = f"ALERT: BTC to {btc_price:,.0f} dollars. Move {delta:+,.0f} dollars ({delta_pct:+.2f}%). Base eighty five thousand. React now."
+        alert_message = f"ALERT: BTC to {btc_price:,.0f} dollars. Move {delta:+,.0f} dollars ({delta_pct:+.2f}%). Base {previous_close:,.0f}. React now."
 
         delivered = await voice_speak(alert_message, alert_context)
         if delivered:

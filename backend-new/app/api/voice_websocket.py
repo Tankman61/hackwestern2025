@@ -357,7 +357,7 @@ class VoiceSession:
                     "type": "agent_text",
                     "text": agent_response_text
                 })
-                self.tts_task = asyncio.create_task(self.speak_response(agent_response_text))
+                self.tts_task = asyncio.create_task(self.speak_response(agent_response_text, turn_id=-1))
                 try:
                     await self.tts_task
                 except asyncio.CancelledError:
@@ -376,11 +376,14 @@ class VoiceSession:
                 "is_thinking": False
             })
 
-    async def speak_response(self, text: str, turn_id: int):
+    async def speak_response(self, text: str, turn_id: int = -1):
         """Convert agent response to speech and stream to frontend"""
         tts = None
         try:
-            logger.info(f"🔊 Speaking response (turn {turn_id}): {text[:50]}...")
+            if turn_id == -1:
+                logger.info(f"🔊 Speaking system alert: {text[:50]}...")
+            else:
+                logger.info(f"🔊 Speaking response (turn {turn_id}): {text[:50]}...")
 
             # Mark as speaking
             self.is_speaking = True
